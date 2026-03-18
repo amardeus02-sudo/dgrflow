@@ -7,37 +7,76 @@ const supabase = createClient(
 );
 
 export default function Dashboard() {
-  const [uploading, setUploading] = useState(false);
+  const [productName, setProductName] = useState("");
+  const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  async function handleUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+  async function handleSubmit(e) {
+    e.preventDefault();
 
-    setUploading(true);
-
-    const { data, error } = await supabase.storage
-      .from("sds-files")
-      .upload(`public/${file.name}`, file);
-
-    if (error) {
-      alert("Erro no upload!");
-      console.log(error);
-    } else {
-      alert("Upload realizado com sucesso!");
-      console.log(data);
+    if (!file || !productName) {
+      alert("Preencha todos os campos!");
+      return;
     }
 
-    setUploading(false);
+    setLoading(true);
+
+    // 1. Upload do arquivo
+    const { data: fileData, error: fileError } = await supabase.storage
+      .from("sds-files")
+      .upload(file.name, file);
+
+    if (fileError) {
+      alert("Erro no upload");
+      console.log(fileError);
+      setLoading(false);
+      return;
+    }
+
+    // 2. Salvar no banco
+    const { error: dbError } = await supabase.from("jobs").insert([
+      {
+        product_name: productName,
+        file_name: file.name,
+        status: "pending",
+      },
+    ]);
+
+    if (dbError) {
+      alert("Erro ao salvar job");
+      console.log(dbError);
+    } else {
+      alert("Job criado com sucesso!");
+      setProductName("");
+      setFile(null);
+    }
+
+    setLoading(false);
   }
 
   return (
     <div style={{ padding: 40 }}>
-      <h1>Dashboard</h1>
-      <p>Upload your SDS file below:</p>
+      <h1>Create Job</h1>
 
-      <input type="file" onChange={handleUpload} />
+      <form onSubmit={handleSubmit}>
+        <input
+          type="text"
+          placeholder="Product Name"
+          value={productName}
+          onChange={(e) => setProductName(e.target.value)}
+        />
+        <br /><br />
 
-      {uploading && <p>Enviando arquivo...</p>}
+        <input
+          type="file"
+          onChange={(e) => setFile(e.target.files[0])}
+        />
+        <br /><br />
+
+        <button type="submit">
+          {loading ? "Sending..." : "Submit Job"}
+        </button>
+      </form>
     </div>
   );
 }
