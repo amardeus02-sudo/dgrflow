@@ -29,9 +29,16 @@ export default function Dashboard() {
 
       {jobs.map((job) => (
         <div key={job.id} style={{ marginBottom: 20 }}>
-          <p>
-            <strong>{job.product_name}</strong> - {job.status}
-          </p>
+       <p>
+  <strong>{job.product_name}</strong> - {job.status}
+</p>
+
+<a
+  href={`https://wwbvrhqeycokiojwzugg.supabase.co/storage/v1/object/public/sds-files/${job.file_name}`}
+  target="_blank"
+>
+  📄 Download SDS
+</a>
 
           {/* BOTÕES GRANDES */}
           <button onClick={() => updateStatus(job.id, "pending")}>
