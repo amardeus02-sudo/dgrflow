@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -10,6 +10,24 @@ export default function Dashboard() {
   const [productName, setProductName] = useState("");
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [jobs, setJobs] = useState([]);
+
+  useEffect(() => {
+    fetchJobs();
+  }, []);
+
+  async function fetchJobs() {
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.log(error);
+    } else {
+      setJobs(data);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -21,8 +39,8 @@ export default function Dashboard() {
 
     setLoading(true);
 
-    // 1. Upload do arquivo
-    const { data: fileData, error: fileError } = await supabase.storage
+    // Upload arquivo
+    const { error: fileError } = await supabase.storage
       .from("sds-files")
       .upload(file.name, file);
 
@@ -33,7 +51,7 @@ export default function Dashboard() {
       return;
     }
 
-    // 2. Salvar no banco
+    // Salvar job
     const { error: dbError } = await supabase.from("jobs").insert([
       {
         product_name: productName,
@@ -49,14 +67,30 @@ export default function Dashboard() {
       alert("Job criado com sucesso!");
       setProductName("");
       setFile(null);
+      fetchJobs();
     }
 
     setLoading(false);
   }
 
+  async function updateStatus(id, newStatus) {
+    const { error } = await supabase
+      .from("jobs")
+      .update({ status: newStatus })
+      .eq("id", id);
+
+    if (error) {
+      console.log(error);
+    } else {
+      fetchJobs();
+    }
+  }
+
   return (
     <div style={{ padding: 40 }}>
-      <h1>Create Job</h1>
+      <h1>DGRFlow Dashboard</h1>
+
+      <h2>Create Job</h2>
 
       <form onSubmit={handleSubmit}>
         <input
@@ -77,6 +111,33 @@ export default function Dashboard() {
           {loading ? "Sending..." : "Submit Job"}
         </button>
       </form>
+
+      <hr />
+
+      <h2>Jobs</h2>
+
+      <ul>
+        {jobs.map((job) => (
+          <li key={job.id}>
+            <strong>{job.product_name}</strong> - {job.status}
+            <br />
+
+            <button onClick={() => updateStatus(job.id, "pending")}>
+              Pending
+            </button>
+
+            <button onClick={() => updateStatus(job.id, "in progress")}>
+              In Progress
+            </button>
+
+            <button onClick={() => updateStatus(job.id, "done")}>
+              Done
+            </button>
+
+            <hr />
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
