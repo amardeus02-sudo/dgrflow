@@ -9,7 +9,6 @@ const supabase = createClient(
 export default function Dashboard() {
   const [productName, setProductName] = useState("");
   const [file, setFile] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [jobs, setJobs] = useState([]);
 
   useEffect(() => {
@@ -17,14 +16,16 @@ export default function Dashboard() {
   }, []);
 
   async function fetchJobs() {
+    console.log("BUSCANDO JOBS...");
+
     const { data, error } = await supabase
       .from("jobs")
-      .select("*")
-      .order("id", { ascending: false });
+      .select("*");
 
-    if (error) {
-      console.log("Erro ao buscar jobs:", error);
-    } else {
+    console.log("DATA:", data);
+    console.log("ERROR:", error);
+
+    if (data) {
       setJobs(data);
     }
   }
@@ -32,29 +33,13 @@ export default function Dashboard() {
   async function handleSubmit(e) {
     e.preventDefault();
 
-    if (!file || !productName) {
-      alert("Preencha todos os campos!");
-      return;
-    }
-
-    setLoading(true);
-
     const filePath = `${Date.now()}-${file.name}`;
 
-    // Upload arquivo
-    const { error: fileError } = await supabase.storage
+    await supabase.storage
       .from("sds-files")
       .upload(filePath, file);
 
-    if (fileError) {
-      alert("Erro no upload");
-      console.log(fileError);
-      setLoading(false);
-      return;
-    }
-
-    // Salvar no banco
-    const { error: dbError } = await supabase.from("jobs").insert([
+    await supabase.from("jobs").insert([
       {
         product_name: productName,
         file_name: filePath,
@@ -62,37 +47,18 @@ export default function Dashboard() {
       },
     ]);
 
-    if (dbError) {
-      alert("Erro ao salvar job");
-      console.log(dbError);
-    } else {
-      alert("Job criado com sucesso!");
-      setProductName("");
-      setFile(null);
-      fetchJobs();
-    }
-
-    setLoading(false);
+    fetchJobs();
   }
 
   async function updateStatus(id, status) {
-    const { error } = await supabase
-      .from("jobs")
-      .update({ status })
-      .eq("id", id);
-
-    if (error) {
-      console.log("Erro ao atualizar status:", error);
-    } else {
-      fetchJobs();
-    }
+    await supabase.from("jobs").update({ status }).eq("id", id);
+    fetchJobs();
   }
 
   return (
     <div style={{ padding: 40 }}>
       <h1>DGRFlow Dashboard</h1>
 
-      {/* FORMULÁRIO */}
       <h2>Create Job</h2>
 
       <form onSubmit={handleSubmit}>
@@ -110,47 +76,34 @@ export default function Dashboard() {
         />
         <br /><br />
 
-        <button type="submit">
-          {loading ? "Sending..." : "Submit Job"}
-        </button>
+        <button type="submit">Submit Job</button>
       </form>
 
       <hr />
 
-      {/* LISTA */}
       <h2>Jobs</h2>
 
       {jobs.length === 0 && <p>Nenhum job encontrado.</p>}
 
       {jobs.map((job) => (
-        <div key={job.id} style={{ marginBottom: 20 }}>
+        <div key={job.id}>
           <p>
-            <strong>{job.product_name}</strong> - {job.status}
+            {job.product_name} - {job.status}
           </p>
 
-          <div style={{ marginBottom: 10 }}>
-            <a
-              href={`https://wwbvrhqeycokiojwzugg.supabase.co/storage/v1/object/public/sds-files/${job.file_name}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              📄 Download SDS
-            </a>
-          </div>
+          <a
+            href={`https://wwbvrhqeycokiojwzugg.supabase.co/storage/v1/object/public/sds-files/${job.file_name}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            📄 Download
+          </a>
 
-          <div style={{ marginBottom: 10 }}>
-            <button onClick={() => updateStatus(job.id, "pending")}>
-              🔴 Pending
-            </button>
+          <br />
 
-            <button onClick={() => updateStatus(job.id, "in progress")}>
-              🟡 In Progress
-            </button>
-
-            <button onClick={() => updateStatus(job.id, "done")}>
-              🟢 Done
-            </button>
-          </div>
+          <button onClick={() => updateStatus(job.id, "done")}>
+            Done
+          </button>
 
           <hr />
         </div>
