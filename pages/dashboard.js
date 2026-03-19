@@ -39,10 +39,13 @@ export default function Dashboard() {
 
     setLoading(true);
 
+    // 🔥 nome único do arquivo
+    const filePath = `${Date.now()}-${file.name}`;
+
     // Upload arquivo
     const { error: fileError } = await supabase.storage
       .from("sds-files")
-      .upload(file.name, file);
+      .upload(filePath, file);
 
     if (fileError) {
       alert("Erro no upload");
@@ -51,11 +54,11 @@ export default function Dashboard() {
       return;
     }
 
-    // Salvar job
+    // Salvar job no banco
     const { error: dbError } = await supabase.from("jobs").insert([
       {
         product_name: productName,
-        file_name: file.name,
+        file_name: filePath,
         status: "pending",
       },
     ]);
