@@ -17,12 +17,16 @@ export default function Dashboard() {
   }, []);
 
   async function fetchJobs() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("jobs")
       .select("*")
       .order("id", { ascending: false });
 
-    setJobs(data || []);
+    if (error) {
+      console.log("Erro ao buscar jobs:", error);
+    } else {
+      setJobs(data);
+    }
   }
 
   async function handleSubmit(e) {
@@ -37,6 +41,7 @@ export default function Dashboard() {
 
     const filePath = `${Date.now()}-${file.name}`;
 
+    // Upload arquivo
     const { error: fileError } = await supabase.storage
       .from("sds-files")
       .upload(filePath, file);
@@ -48,6 +53,7 @@ export default function Dashboard() {
       return;
     }
 
+    // Salvar no banco
     const { error: dbError } = await supabase.from("jobs").insert([
       {
         product_name: productName,
@@ -60,7 +66,7 @@ export default function Dashboard() {
       alert("Erro ao salvar job");
       console.log(dbError);
     } else {
-      alert("Job criado!");
+      alert("Job criado com sucesso!");
       setProductName("");
       setFile(null);
       fetchJobs();
@@ -70,15 +76,23 @@ export default function Dashboard() {
   }
 
   async function updateStatus(id, status) {
-    await supabase.from("jobs").update({ status }).eq("id", id);
-    fetchJobs();
+    const { error } = await supabase
+      .from("jobs")
+      .update({ status })
+      .eq("id", id);
+
+    if (error) {
+      console.log("Erro ao atualizar status:", error);
+    } else {
+      fetchJobs();
+    }
   }
 
   return (
     <div style={{ padding: 40 }}>
       <h1>DGRFlow Dashboard</h1>
 
-      {/* FORM */}
+      {/* FORMULÁRIO */}
       <h2>Create Job</h2>
 
       <form onSubmit={handleSubmit}>
@@ -105,6 +119,8 @@ export default function Dashboard() {
 
       {/* LISTA */}
       <h2>Jobs</h2>
+
+      {jobs.length === 0 && <p>Nenhum job encontrado.</p>}
 
       {jobs.map((job) => (
         <div key={job.id} style={{ marginBottom: 20 }}>
