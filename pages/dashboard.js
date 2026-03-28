@@ -137,19 +137,7 @@ export default function Dashboard() {
         <div style={nav}>
           <button style={navItem}>Dashboard</button>
 
-          {isAdmin && (
-            <button onClick={() => router.push("/admin")} style={navItem}>
-              Admin
-            </button>
-          )}
-        </div>
-
-        <button onClick={logout} style={logoutBtn}>
-          Logout
-        </button>
-      </div>
-
-      {/* MAIN */}
+          {/* MAIN */}
       <div style={main}>
 
         {/* HEADER */}
