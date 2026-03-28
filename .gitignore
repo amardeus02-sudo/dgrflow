@@ -1,0 +1,6 @@
+node_modules
+<<<<<<< HEAD
+.next
+.env
+=======
+>>>>>>> 2f0cc80 (fix: remove node_modules from repo)
