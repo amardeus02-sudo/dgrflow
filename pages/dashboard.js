@@ -73,11 +73,13 @@ export default function Dashboard() {
     }
 
     await supabase.from("jobs").insert([{
-      ...form,
-      user_id: userId,
-      sds_file: filePath,
-      status: "pending"
-    }]);
+  ...form,
+  product_name: form.product_name,
+  bol: form.bol,
+  user_id: userId,
+  sds_file: filePath,
+  status: "pending"
+}]);
 
     setForm({ unit: "kg" });
     setFile(null);
