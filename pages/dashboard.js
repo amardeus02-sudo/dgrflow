@@ -130,6 +130,9 @@ export default function Dashboard() {
 
           <form onSubmit={handleSubmit} style={grid}>
 
+            <input name="product_name" placeholder="Product Name" onChange={handleChange} />
+            <input name="bol" placeholder="Bill of Lading (BOL)" onChange={handleChange} />
+          
             <input name="shipper" placeholder="Shipper" onChange={handleChange}/>
             <input name="consignee" placeholder="Consignee" onChange={handleChange}/>
             <input name="bol" placeholder="Bill of Lading"/>
