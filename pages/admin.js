@@ -14,7 +14,38 @@ export default function Admin() {
   }
 
   async function updateStatus(job, status) {
-    await supabase.from("jobs").update({ status }).eq("id", job.id);
+  await supabase.from("jobs").update({ status }).eq("id", job.id);
+
+  if (status === "done") {
+    
+    // 1. GERAR PDF
+    const pdfRes = await fetch("/api/generate-pdf", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(job),
+    });
+
+    const pdfData = await pdfRes.json();
+
+    // 2. ESPERAR URL DO PDF
+    if (pdfData?.url && job.email) {
+      await fetch("/api/send-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: job.email,
+          pdfUrl: pdfData.url,
+        }),
+      });
+    }
+  }
+
+  fetchJobs();
+}
 
     if (status === "done") {
       await fetch("/api/generate-pdf", {
