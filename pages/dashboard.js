@@ -10,6 +10,16 @@ export default function Dashboard() {
 
   const [form, setForm] = useState({
     transport_type: "air",
+    shipper: "",
+    consignee: "",
+    bol: "",
+    job_date: "",
+    emergency_contact: "",
+    type_of_packages: "",
+    number_of_packages: "",
+    quantity_boxes: "",
+    gross_weight: "",
+    unit: "kg"
   });
 
   useEffect(() => {
@@ -17,54 +27,85 @@ export default function Dashboard() {
   }, []);
 
   async function init() {
-    const { data } = await supabase.auth.getUser();
+    try {
+      const { data } = await supabase.auth.getUser();
 
-    if (!data.user) {
-      router.push("/login");
-      return;
+      if (!data?.user) {
+        router.push("/login");
+        return;
+      }
+
+      const user = data.user;
+
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      setProfile(profileData || {});
+      fetchJobs();
+    } catch (err) {
+      console.error("INIT ERROR", err);
     }
-
-    const user = data.user;
-
-    const { data: profileData } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", user.id)
-      .single();
-
-    setProfile(profileData);
-    fetchJobs();
   }
 
   async function fetchJobs() {
-    const { data } = await supabase
-      .from("jobs")
-      .select("*")
-      .order("created_at", { ascending: false });
+    try {
+      const { data } = await supabase
+        .from("jobs")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-    setJobs(data || []);
+      setJobs(data || []);
+    } catch (err) {
+      console.error("FETCH JOBS ERROR", err);
+    }
   }
 
   function handleChange(e) {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    setForm((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
 
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user.id;
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
 
-    await supabase.from("jobs").insert([
-      {
-        ...form,
-        user_id: userId,
-        status: "pending",
-      },
-    ]);
+      if (!userId) return;
 
-    setForm({ transport_type: "air" });
-    fetchJobs();
+      await supabase.from("jobs").insert([
+        {
+          ...form,
+          user_id: userId,
+          status: "pending",
+        },
+      ]);
+
+      // reset form
+      setForm({
+        transport_type: "air",
+        shipper: "",
+        consignee: "",
+        bol: "",
+        job_date: "",
+        emergency_contact: "",
+        type_of_packages: "",
+        number_of_packages: "",
+        quantity_boxes: "",
+        gross_weight: "",
+        unit: "kg"
+      });
+
+      fetchJobs();
+    } catch (err) {
+      console.error("SUBMIT ERROR", err);
+    }
   }
 
   async function logout() {
@@ -79,7 +120,7 @@ export default function Dashboard() {
       
       {/* SIDEBAR */}
       <div style={sidebar}>
-        <h2 style={brand}>DGRFlow</h2>
+        <h2>DGRFlow</h2>
 
         <button style={navItem}>Dashboard</button>
 
@@ -96,25 +137,25 @@ export default function Dashboard() {
 
       {/* MAIN */}
       <div style={main}>
-        <h1 style={title}>Dashboard</h1>
+        <h1>Dashboard</h1>
 
         {/* FORM */}
         <div style={card}>
           <h3>Create Job</h3>
 
           <form onSubmit={handleSubmit} style={grid}>
-            <input name="shipper" placeholder="Shipper" onChange={handleChange} style={input}/>
-            <input name="consignee" placeholder="Consignee" onChange={handleChange} style={input}/>
-            <input name="bol" placeholder="BOL" onChange={handleChange} style={input}/>
-            <input name="job_date" placeholder="Date" onChange={handleChange} style={input}/>
-            <input name="emergency_contact" placeholder="Emergency Contact" onChange={handleChange} style={input}/>
+            <input name="shipper" value={form.shipper} placeholder="Shipper" onChange={handleChange} style={input}/>
+            <input name="consignee" value={form.consignee} placeholder="Consignee" onChange={handleChange} style={input}/>
+            <input name="bol" value={form.bol} placeholder="BOL" onChange={handleChange} style={input}/>
+            <input name="job_date" value={form.job_date} placeholder="Date" onChange={handleChange} style={input}/>
+            <input name="emergency_contact" value={form.emergency_contact} placeholder="Emergency Contact" onChange={handleChange} style={input}/>
 
-            <input name="type_of_packages" placeholder="Type of Packages" onChange={handleChange} style={input}/>
-            <input name="number_of_packages" placeholder="Number of Packages" onChange={handleChange} style={input}/>
-            <input name="quantity_boxes" placeholder="Quantity of Boxes" onChange={handleChange} style={input}/>
-            <input name="gross_weight" placeholder="Weight" onChange={handleChange} style={input}/>
+            <input name="type_of_packages" value={form.type_of_packages} placeholder="Type of Packages" onChange={handleChange} style={input}/>
+            <input name="number_of_packages" value={form.number_of_packages} placeholder="Number of Packages" onChange={handleChange} style={input}/>
+            <input name="quantity_boxes" value={form.quantity_boxes} placeholder="Quantity of Boxes" onChange={handleChange} style={input}/>
+            <input name="gross_weight" value={form.gross_weight} placeholder="Weight" onChange={handleChange} style={input}/>
 
-            <select name="unit" onChange={handleChange} style={input}>
+            <select name="unit" value={form.unit} onChange={handleChange} style={input}>
               <option value="kg">kg</option>
               <option value="lb">lb</option>
               <option value="oz">oz</option>
@@ -128,11 +169,11 @@ export default function Dashboard() {
         <div style={jobsGrid}>
           {jobs.map((job) => (
             <div key={job.id} style={jobCard}>
-              <strong>{job.shipper}</strong>
+              <strong>{job.shipper || "No name"}</strong>
               <p>Status: {job.status}</p>
 
               {job.pdf_url && (
-                <a href={job.pdf_url} target="_blank" style={{ color: "#38bdf8" }}>
+                <a href={job.pdf_url} target="_blank">
                   View PDF
                 </a>
               )}
@@ -157,8 +198,6 @@ const sidebar = {
   justifyContent: "space-between"
 };
 
-const brand = { fontSize: 22 };
-
 const navItem = {
   marginTop: 10,
   padding: 10,
@@ -177,8 +216,6 @@ const logoutBtn = {
 };
 
 const main = { flex: 1, padding: 30 };
-
-const title = { fontSize: 24, marginBottom: 20 };
 
 const card = {
   background: "#0f172a",
@@ -220,4 +257,3 @@ const jobCard = {
   padding: 15,
   borderRadius: 10
 };
-        
