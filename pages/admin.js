@@ -9,37 +9,53 @@ export default function Admin() {
   }, []);
 
   async function fetchJobs() {
-    const { data } = await supabase
-      .from("jobs")
-      .select("*")
-      .order("created_at", { ascending: false });
-
+    const { data } = await supabase.from("jobs").select("*");
     setJobs(data || []);
   }
 
-  async function updateStatus(id, status) {
-    await supabase
-      .from("jobs")
-      .update({ status })
-      .eq("id", id);
+  async function updateStatus(job, status) {
+    await supabase.from("jobs").update({ status }).eq("id", job.id);
+
+    if (status === "done") {
+      await fetch("/api/generate-pdf", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(job),
+      });
+
+      if (job.email) {
+        await fetch("/api/send-email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: job.email,
+            pdfUrl: job.pdf_url,
+          }),
+        });
+      }
+    }
 
     fetchJobs();
   }
 
   return (
-    <div style={{ padding: 40 }}>
-      <h1>Admin Panel</h1>
+    <div style={{ padding: 30 }}>
+      <h1>Admin</h1>
 
       {jobs.map((job) => (
-        <div key={job.id} style={{ marginBottom: 20 }}>
-          <strong>{job.product_name}</strong>
+        <div key={job.id} style={{ border: "1px solid #ccc", marginBottom: 20, padding: 10 }}>
+          <p>{job.shipper}</p>
           <p>Status: {job.status}</p>
 
-          <button onClick={() => updateStatus(job.id, "classified")}>
+          <button onClick={() => updateStatus(job, "classified")}>
             Classify
           </button>
 
-          <button onClick={() => updateStatus(job.id, "done")}>
+          <button onClick={() => updateStatus(job, "done")}>
             Done
           </button>
         </div>
