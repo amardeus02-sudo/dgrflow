@@ -50,21 +50,29 @@ export default async function handler(req, res) {
     console.log("PDF TEXT LENGTH:", fullText.length);
 
     // 🔍 extrair seções
-    const section14 = extractSection(fullText, 14);
-    const section9 = extractSection(fullText, 9);
+    const relevantText = fullText.slice(0, 15000);
 
     console.log("SECTION 14:", section14.slice(0, 300));
     console.log("SECTION 9:", section9.slice(0, 300));
 
     // 🧠 PROMPT
-    const prompt = `
+   const prompt = `
 You are a dangerous goods classification expert.
 
-Extract ONLY from SDS Section 14 and Section 9.
+From the SDS text below, extract transport and chemical safety data.
 
-Return STRICT JSON only.
+Focus on:
+- UN number
+- Proper Shipping Name (technical name)
+- Hazard Class
+- Subsidiary Risk
+- Packing Group
+- Flash Point
+- EMS code
 
-If missing, return "".
+Return ONLY JSON.
+
+If not found, return "".
 
 {
   "un_number": "",
@@ -76,13 +84,9 @@ If missing, return "".
   "ems": ""
 }
 
-SECTION 14:
-${section14}
-
-SECTION 9:
-${section9}
+SDS TEXT:
+${relevantText}
 `;
-
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
