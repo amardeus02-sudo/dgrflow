@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import pdfParse from "pdf-parse/lib/pdf-parse.js";
+import pdfParse from "pdf-parse";
 import { createClient } from "@supabase/supabase-js";
 
 export const config = {
@@ -17,7 +17,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// função para extrair seções (funciona com vários formatos)
+// extrair seção (robusto)
 function extractSection(text, sectionNumber) {
   const regex = new RegExp(
     `(SECTION|Section|Seção|SEÇÃO)\\s*${sectionNumber}[\\s\\S]*?(?=SECTION|Section|Seção|SEÇÃO|$)`,
@@ -43,30 +43,28 @@ export default async function handler(req, res) {
 
     const fileBuffer = Buffer.concat(buffers);
 
-    // 📄 extrair texto do PDF
+    // 📄 ler PDF
     const pdfData = await pdfParse(fileBuffer);
     const fullText = pdfData.text;
 
     console.log("PDF TEXT LENGTH:", fullText.length);
 
-    // 🔍 extrair seções importantes
+    // 🔍 extrair seções
     const section14 = extractSection(fullText, 14);
     const section9 = extractSection(fullText, 9);
 
-    console.log("SECTION 14:", section14.slice(0, 500));
-    console.log("SECTION 9:", section9.slice(0, 500));
+    console.log("SECTION 14:", section14.slice(0, 300));
+    console.log("SECTION 9:", section9.slice(0, 300));
 
-    // 🧠 PROMPT FORTE
+    // 🧠 PROMPT
     const prompt = `
 You are a dangerous goods classification expert.
 
-Extract ONLY from SDS Section 14 (Transport Information) and Section 9.
+Extract ONLY from SDS Section 14 and Section 9.
 
-Return STRICT JSON only. No explanation.
+Return STRICT JSON only.
 
-If data is missing, return "".
-
-JSON format:
+If missing, return "".
 
 {
   "un_number": "",
@@ -85,7 +83,6 @@ SECTION 9:
 ${section9}
 `;
 
-    // 🤖 chamar IA
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
@@ -101,21 +98,15 @@ ${section9}
     try {
       result = JSON.parse(raw);
     } catch (err) {
-      console.error("JSON PARSE ERROR:", err);
+      console.error("JSON ERROR:", err);
       return res.status(500).json({
-        error: "AI did not return valid JSON",
+        error: "Invalid JSON from AI",
         raw,
       });
     }
 
     console.log("PARSED RESULT:", result);
 
-    // ⚠️ se não veio nada útil
-    if (!result.un_number && !result.hazard_class) {
-      console.log("⚠️ IA não encontrou dados relevantes");
-    }
-
-    // 🔥 SALVAR NO BANCO
     const jobId = req.headers["x-job-id"];
 
     if (jobId) {
@@ -132,7 +123,7 @@ ${section9}
         })
         .eq("id", jobId);
 
-      console.log("DB UPDATE ERROR:", error);
+      console.log("DB ERROR:", error);
     }
 
     return res.status(200).json({
@@ -142,8 +133,7 @@ ${section9}
   } catch (error) {
     console.error("🔥 ERROR:", error);
     return res.status(500).json({
-      error: "Internal error",
-      details: error.message,
+      error: error.message,
     });
   }
 }
