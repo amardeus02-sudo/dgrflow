@@ -1,50 +1,72 @@
-import { OpenAI } from "openai";
-import pdfParse from "pdf-parse";
+import OpenAI from "openai";
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { createClient } from "@supabase/supabase-js";
 
-function extractSections(text) {
-  const section9 = text.split(/section\s*9/i)[1]?.split(/section\s*10/i)[0] || "";
-  const section14 = text.split(/section\s*14/i)[1]?.split(/section\s*15/i)[0] || "";
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
-  return {
-    section9: section9.slice(0, 5000),
-    section14: section14.slice(0, 5000),
-  };
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// função para extrair seções (funciona com vários formatos)
+function extractSection(text, sectionNumber) {
+  const regex = new RegExp(
+    `(SECTION|Section|Seção|SEÇÃO)\\s*${sectionNumber}[\\s\\S]*?(?=SECTION|Section|Seção|SEÇÃO|$)`,
+    "i"
+  );
+  const match = text.match(regex);
+  return match ? match[0] : "";
 }
 
 export default async function handler(req, res) {
   try {
-    const { filePath, jobId } = req.body;
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Method not allowed" });
+    }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    const buffers = [];
 
-    // 📥 baixar SDS
-    const { data } = await supabase.storage
-      .from("sds-files")
-      .download(filePath);
-
-    const buffer = await data.arrayBuffer();
-
-    // 📄 extrair texto
-    const parsed = await pdfParse(Buffer.from(buffer));
-    const fullText = parsed.text;
-
-    // ✂️ pegar apenas seções importantes
-    const { section9, section14 } = extractSections(fullText);
-
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+    await new Promise((resolve, reject) => {
+      req.on("data", (chunk) => buffers.push(chunk));
+      req.on("end", resolve);
+      req.on("error", reject);
     });
 
+    const fileBuffer = Buffer.concat(buffers);
+
+    // 📄 extrair texto do PDF
+    const pdfData = await pdfParse(fileBuffer);
+    const fullText = pdfData.text;
+
+    console.log("PDF TEXT LENGTH:", fullText.length);
+
+    // 🔍 extrair seções importantes
+    const section14 = extractSection(fullText, 14);
+    const section9 = extractSection(fullText, 9);
+
+    console.log("SECTION 14:", section14.slice(0, 500));
+    console.log("SECTION 9:", section9.slice(0, 500));
+
+    // 🧠 PROMPT FORTE
     const prompt = `
-You are a dangerous goods specialist.
+You are a dangerous goods classification expert.
 
-Extract ONLY from the provided SDS sections.
+Extract ONLY from SDS Section 14 (Transport Information) and Section 9.
 
-Return JSON in this exact format:
+Return STRICT JSON only. No explanation.
+
+If data is missing, return "".
+
+JSON format:
 
 {
   "un_number": "",
@@ -63,40 +85,65 @@ SECTION 9:
 ${section9}
 `;
 
+    // 🤖 chamar IA
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "Return only JSON." },
-        { role: "user", content: prompt },
-      ],
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0,
     });
+
+    const raw = response.choices[0].message.content;
+
+    console.log("AI RAW:", raw);
 
     let result;
 
     try {
-      result = JSON.parse(response.choices[0].message.content);
-    } catch {
-      return res.status(500).json({ error: "AI parse error" });
+      result = JSON.parse(raw);
+    } catch (err) {
+      console.error("JSON PARSE ERROR:", err);
+      return res.status(500).json({
+        error: "AI did not return valid JSON",
+        raw,
+      });
     }
 
-    // 💾 salvar no banco
-    await supabase
-      .from("jobs")
-      .update({
-        un_number: result.un_number,
-        technical_name: result.technical_name,
-        hazard_class: result.hazard_class,
-        subsidiary_risk: result.subsidiary_risk,
-        packing_group: result.packing_group,
-        flash_point: result.flash_point,
-        ems: result.ems,
-      })
-      .eq("id", jobId);
+    console.log("PARSED RESULT:", result);
 
-    res.status(200).json({ success: true, result });
+    // ⚠️ se não veio nada útil
+    if (!result.un_number && !result.hazard_class) {
+      console.log("⚠️ IA não encontrou dados relevantes");
+    }
 
-  } catch (err) {
-    console.log("SDS ERROR:", err);
-    res.status(500).json({ error: err.message });
+    // 🔥 SALVAR NO BANCO
+    const jobId = req.headers["x-job-id"];
+
+    if (jobId) {
+      const { error } = await supabase
+        .from("jobs")
+        .update({
+          un_number: result.un_number || "",
+          technical_name: result.technical_name || "",
+          hazard_class: result.hazard_class || "",
+          subsidiary_risk: result.subsidiary_risk || "",
+          packing_group: result.packing_group || "",
+          flash_point: result.flash_point || "",
+          ems: result.ems || "",
+        })
+        .eq("id", jobId);
+
+      console.log("DB UPDATE ERROR:", error);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error("🔥 ERROR:", error);
+    return res.status(500).json({
+      error: "Internal error",
+      details: error.message,
+    });
   }
 }
