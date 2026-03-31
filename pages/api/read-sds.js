@@ -17,14 +17,12 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// extrair seção (robusto)
-function extractSection(text, sectionNumber) {
-  const regex = new RegExp(
-    `(SECTION|Section|Seção|SEÇÃO)\\s*${sectionNumber}[\\s\\S]*?(?=SECTION|Section|Seção|SEÇÃO|$)`,
-    "i"
-  );
-  const match = text.match(regex);
-  return match ? match[0] : "";
+// 🔍 Detect transport mode
+function detectTransportMode(text) {
+  if (/iata/i.test(text)) return "AIR";
+  if (/imdg/i.test(text)) return "SEA";
+  if (/adr|rid/i.test(text)) return "GROUND";
+  return "";
 }
 
 export default async function handler(req, res) {
@@ -33,6 +31,13 @@ export default async function handler(req, res) {
       return res.status(405).json({ error: "Method not allowed" });
     }
 
+    const jobId = req.headers["x-job-id"];
+
+    if (!jobId) {
+      return res.status(400).json({ error: "Missing job ID" });
+    }
+
+    // 📥 receber arquivo
     const buffers = [];
 
     await new Promise((resolve, reject) => {
@@ -43,36 +48,62 @@ export default async function handler(req, res) {
 
     const fileBuffer = Buffer.concat(buffers);
 
-    // 📄 ler PDF
+    // 📄 extrair texto do PDF
     const pdfData = await pdfParse(fileBuffer);
     const fullText = pdfData.text;
 
-    console.log("PDF TEXT LENGTH:", fullText.length);
+    console.log("PDF LENGTH:", fullText.length);
 
-    // 🔍 extrair seções
+    // 🧠 pegar parte relevante
     const relevantText = fullText.slice(0, 15000);
 
-    console.log("SECTION 14:", section14.slice(0, 300));
-    console.log("SECTION 9:", section9.slice(0, 300));
+    // 🔥 FLASH POINT (regex forte)
+    const flashMatch = fullText.match(
+      /(flash point|fp|closed cup|pensky)[^0-9\-<]{0,30}([<]?\s?\d+(\.\d+)?\s?°?\s?[CF])/i
+    );
+
+    const detectedFlashPoint = flashMatch
+      ? flashMatch[2].replace(/\s+/g, "")
+      : "";
+
+    console.log("FLASH DETECTED:", detectedFlashPoint);
+
+    // 🚛 TRANSPORT MODE
+    const detectedTransport = detectTransportMode(fullText);
+
+    console.log("TRANSPORT DETECTED:", detectedTransport);
+
+    // 🧹 LIMPAR DADOS ANTIGOS (ANTI BUG)
+    await supabase
+      .from("jobs")
+      .update({
+        un_number: "",
+        technical_name: "",
+        hazard_class: "",
+        subsidiary_risk: "",
+        packing_group: "",
+        flash_point: "",
+        ems: "",
+        transport_mode: "",
+      })
+      .eq("id", jobId);
 
     // 🧠 PROMPT
-   const prompt = `
+    const prompt = `
 You are a dangerous goods classification expert.
 
-From the SDS text below, extract transport and chemical safety data.
+Extract data from this SDS.
 
-Focus on:
-- UN number
-- Proper Shipping Name (technical name)
-- Hazard Class
-- Subsidiary Risk
-- Packing Group
-- Flash Point
-- EMS code
+IMPORTANT:
+- Transport mode must be AIR, SEA or GROUND
+- IMDG = SEA
+- IATA = AIR
+- ADR/RID = GROUND
+
+Flash point may appear as:
+Flash Point, FP, Closed Cup, Pensky
 
 Return ONLY JSON.
-
-If not found, return "".
 
 {
   "un_number": "",
@@ -81,12 +112,18 @@ If not found, return "".
   "subsidiary_risk": "",
   "packing_group": "",
   "flash_point": "",
-  "ems": ""
+  "ems": "",
+  "transport_mode": ""
 }
+
+Detected flash point: ${detectedFlashPoint}
+Detected transport: ${detectedTransport}
 
 SDS TEXT:
 ${relevantText}
 `;
+
+    // 🤖 IA
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
@@ -109,26 +146,34 @@ ${relevantText}
       });
     }
 
-    console.log("PARSED RESULT:", result);
+    console.log("PARSED:", result);
 
-    const jobId = req.headers["x-job-id"];
-
-    if (jobId) {
-      const { error } = await supabase
-        .from("jobs")
-        .update({
-          un_number: result.un_number || "",
-          technical_name: result.technical_name || "",
-          hazard_class: result.hazard_class || "",
-          subsidiary_risk: result.subsidiary_risk || "",
-          packing_group: result.packing_group || "",
-          flash_point: result.flash_point || "",
-          ems: result.ems || "",
-        })
-        .eq("id", jobId);
-
-      console.log("DB ERROR:", error);
+    // 🔥 fallback inteligente
+    if (!result.flash_point && detectedFlashPoint) {
+      result.flash_point = detectedFlashPoint;
     }
+
+    if (!result.transport_mode && detectedTransport) {
+      result.transport_mode = detectedTransport;
+    }
+
+    // 💾 salvar no banco
+    const { error } = await supabase
+      .from("jobs")
+      .update({
+        un_number: result.un_number || "",
+        technical_name: result.technical_name || "",
+        hazard_class: result.hazard_class || "",
+        subsidiary_risk: result.subsidiary_risk || "",
+        packing_group: result.packing_group || "",
+        flash_point: result.flash_point || "",
+        ems: result.ems || "",
+        transport_mode: result.transport_mode || "",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", jobId);
+
+    console.log("DB ERROR:", error);
 
     return res.status(200).json({
       success: true,
