@@ -17,7 +17,7 @@ export default function Admin() {
 
     if (!data.user) return router.push("/login");
 
-    if (data.user.email !== "SEUEMAIL@gmail.com") {
+    if (data.user.email !== "amardeus02@gmail.com") {
       return router.push("/dashboard");
     }
 
