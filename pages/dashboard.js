@@ -81,7 +81,7 @@ export default function Dashboard() {
     router.push("/login");
   }
 
-  const isAdmin = profile?.email === "SEUEMAIL@gmail.com";
+  const isAdmin = profile?.email === "amardeus02@gmail.com";
 
   function statusColor(status) {
     if (status === "pending") return "#facc15";
