@@ -1,211 +1,294 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
+import { useRouter } from "next/router";
 
 export default function Dashboard() {
+  const router = useRouter();
+
+  const [jobs, setJobs] = useState([]);
+  const [profile, setProfile] = useState(null);
   const [file, setFile] = useState(null);
-  const [jobId, setJobId] = useState(null);
-  const [jobData, setJobData] = useState(null);
-  const [loading, setLoading] = useState(false);
+
+  const [form, setForm] = useState({
+    transport_type: "air"
+  });
 
   useEffect(() => {
-    createJob();
+    init();
   }, []);
 
-  useEffect(() => {
-    if (!jobId) return;
+  async function init() {
+    const { data } = await supabase.auth.getUser();
 
-    const interval = setInterval(() => {
-      loadJob();
-    }, 2000);
+    if (!data.user) return router.push("/login");
 
-    return () => clearInterval(interval);
-  }, [jobId]);
+    const user = data.user;
 
-  async function createJob() {
-    const res = await fetch("/api/create-job", { method: "POST" });
-    const data = await res.json();
-    setJobId(data.id);
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    setProfile(profileData);
+    fetchJobs();
   }
 
-  async function handleReadSDS() {
-    if (!file || !jobId) return;
+  async function fetchJobs() {
+    const { data } = await supabase
+      .from("jobs")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-    setLoading(true);
-
-    await fetch("/api/read-sds", {
-      method: "POST",
-      headers: {
-        "x-job-id": jobId,
-      },
-      body: file,
-    });
-
-    setLoading(false);
+    setJobs(data || []);
   }
 
-  async function handleClassify() {
-    if (!jobId) return;
-
-    setLoading(true);
-
-    await fetch("/api/classify", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ jobId }),
-    });
-
-    setLoading(false);
+  function handleChange(e) {
+    setForm({ ...form, [e.target.name]: e.target.value });
   }
 
-  async function loadJob() {
-    const res = await fetch(`/api/get-job?id=${jobId}`);
-    const data = await res.json();
-    setJobData(data);
+  async function handleSubmit(e) {
+    e.preventDefault();
+
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user.id;
+
+    let filePath = null;
+
+    if (file) {
+      filePath = `${userId}/${Date.now()}_${file.name}`;
+      const { error } = await supabase.storage.from("sds-files").upload(filePath, file);
+      if (error) return alert(error.message);
+    }
+
+    const { error } = await supabase.from("jobs").insert([{
+      ...form,
+      user_id: userId,
+      file_name: filePath,
+      status: "pending"
+    }]);
+
+    if (error) return alert(error.message);
+
+    alert("Job enviado 🚀");
+    setForm({ transport_type: "air" });
+    setFile(null);
+    fetchJobs();
   }
 
-  function getStatusColor(status) {
-    if (status === "uploaded") return "#64748b";
-    if (status === "parsed") return "#f59e0b";
-    if (status === "classified") return "#22c55e";
-    return "#ef4444";
+  async function logout() {
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
+
+  const isAdmin = profile?.email === "SEUEMAIL@gmail.com";
+
+  function statusColor(status) {
+    if (status === "pending") return "#facc15";
+    if (status === "classified") return "#38bdf8";
+    if (status === "done") return "#22c55e";
+    return "#64748b";
   }
 
   return (
-    <div style={container}>
-      <h1 style={title}>🚀 DGRFlow Dashboard</h1>
+    <div style={layout}>
 
-      {/* UPLOAD */}
-      <div style={card}>
-        <input type="file" onChange={(e) => setFile(e.target.files[0])} />
+      {/* SIDEBAR */}
+      <div style={sidebar}>
+        <h2 style={brand}>DGRFlow</h2>
 
-        <div style={{ marginTop: 15 }}>
-          <button
-            onClick={handleReadSDS}
-            disabled={!file || loading}
-            style={btn}
-          >
-            📄 Read SDS
-          </button>
+        <div style={nav}>
+          <button style={navItem}>Dashboard</button>
 
-          <button
-            onClick={handleClassify}
-            disabled={!jobData || jobData.status !== "parsed" || loading}
-            style={btnPurple}
-          >
-            🤖 Classify
-          </button>
+          {isAdmin && (
+            <button onClick={() => router.push("/admin")} style={navItem}>
+              Admin
+            </button>
+          )}
         </div>
+
+        <button onClick={logout} style={logoutBtn}>
+          Logout
+        </button>
       </div>
 
-      {/* STATUS */}
-      {jobData && (
-        <div style={card}>
-          <h3>Status</h3>
-          <div
-            style={{
-              background: getStatusColor(jobData.status),
-              padding: 10,
-              borderRadius: 6,
-              display: "inline-block",
-              marginTop: 10,
-            }}
-          >
-            {jobData.status}
-          </div>
-        </div>
-      )}
+      {/* MAIN */}
+      <div style={main}>
 
-      {/* RESULTADOS */}
-      {jobData?.status === "classified" && (
+        <h1 style={title}>Create New Job</h1>
+
+        {/* CLIENT FORM */}
         <div style={card}>
-          <h3>📦 Dangerous Goods Classification</h3>
+          <h3>Product Information</h3>
 
           <div style={grid}>
-            <Item label="UN Number" value={jobData.un_number} />
-            <Item label="Technical Name" value={jobData.technical_name} />
-            <Item label="Hazard Class" value={jobData.hazard_class} />
-            <Item label="Packing Group" value={jobData.packing_group} />
-            <Item label="Flash Point" value={jobData.flash_point} />
-            <Item label="EMS" value={jobData.ems} />
-            <Item label="Transport Mode" value={jobData.transport_mode} />
+            <input name="product_name" placeholder="Product Name" onChange={handleChange} style={input}/>
+            <input name="company" placeholder="Manufacturer / Company" onChange={handleChange} style={input}/>
+            <input name="category" placeholder="Category" onChange={handleChange} style={input}/>
           </div>
         </div>
-      )}
 
-      {/* LOADING */}
-      {loading && (
-        <div style={loadingBox}>
-          ⏳ Processing...
+        <div style={card}>
+          <h3>Packaging & Quantity</h3>
+
+          <div style={grid}>
+            <input name="quantity" placeholder="Quantity" onChange={handleChange} style={input}/>
+            <input name="unit_type" placeholder="Unit Type" onChange={handleChange} style={input}/>
+            <input name="gross_weight" placeholder="Gross Weight" onChange={handleChange} style={input}/>
+            <input name="boxes" placeholder="Boxes" onChange={handleChange} style={input}/>
+            <input name="units_per_box" placeholder="Units per Box" onChange={handleChange} style={input}/>
+          </div>
         </div>
-      )}
-    </div>
-  );
-}
 
-/* COMPONENTE ITEM */
+        <div style={card}>
+          <h3>Transport</h3>
 
-function Item({ label, value }) {
-  return (
-    <div style={item}>
-      <strong>{label}</strong>
-      <div>{value || "-"}</div>
+          <select name="transport_type" onChange={handleChange} style={input}>
+            <option value="air">Air</option>
+            <option value="sea">Sea</option>
+            <option value="ground">Ground</option>
+          </select>
+
+          <input type="file" onChange={(e) => setFile(e.target.files[0])} style={{ marginTop: 10 }} />
+
+          <button onClick={handleSubmit} style={primaryBtn}>
+            Submit Job
+          </button>
+        </div>
+
+        {/* JOBS */}
+        <h2 style={{ marginTop: 30 }}>My Jobs</h2>
+
+        <div style={jobsGrid}>
+          {jobs.map((job) => (
+            <div key={job.id} style={jobCard}>
+              <div style={jobTop}>
+                <strong>{job.product_name}</strong>
+                <span style={{
+                  background: statusColor(job.status),
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  fontSize: 12
+                }}>
+                  {job.status}
+                </span>
+              </div>
+
+              <p style={muted}>{job.company}</p>
+
+              <div style={divider} />
+
+              <div style={jobMeta}>
+                <span>{job.quantity}</span>
+                <span>{job.boxes} boxes</span>
+                <span>{job.transport_type}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+      </div>
     </div>
   );
 }
 
 /* STYLES */
 
-const container = {
-  background: "#020617",
-  minHeight: "100vh",
-  color: "white",
-  padding: 40,
-  fontFamily: "Arial",
+const layout = { display: "flex", minHeight: "100vh", background: "#020617", color: "white" };
+
+const sidebar = {
+  width: 220,
+  padding: 20,
+  borderRight: "1px solid #1e293b",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "space-between"
 };
 
-const title = {
-  marginBottom: 20,
+const brand = { fontSize: 22 };
+
+const nav = { display: "flex", flexDirection: "column", gap: 10 };
+
+const navItem = {
+  padding: 10,
+  borderRadius: 8,
+  background: "transparent",
+  border: "none",
+  color: "white",
+  textAlign: "left"
 };
+
+const logoutBtn = {
+  padding: 10,
+  borderRadius: 8,
+  background: "#7c3aed",
+  border: "none",
+  color: "white"
+};
+
+const main = { flex: 1, padding: 30 };
+
+const title = { marginBottom: 20 };
 
 const card = {
   background: "#0f172a",
   padding: 20,
-  borderRadius: 10,
-  marginBottom: 20,
+  borderRadius: 12,
+  marginBottom: 20
 };
 
 const grid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(200px,1fr))",
-  gap: 15,
-  marginTop: 20,
+  gridTemplateColumns: "repeat(3, 1fr)",
+  gap: 10
 };
 
-const item = {
-  background: "#1e293b",
+const input = {
   padding: 10,
-  borderRadius: 6,
-};
-
-const btn = {
-  padding: 10,
-  marginRight: 10,
-  background: "#38bdf8",
-  border: "none",
-  borderRadius: 6,
-  color: "white",
-  cursor: "pointer",
-};
-
-const btnPurple = {
-  ...btn,
-  background: "#7c3aed",
-};
-
-const loadingBox = {
-  marginTop: 20,
-  padding: 15,
-  background: "#1e293b",
   borderRadius: 8,
+  border: "1px solid #334155",
+  background: "#020617",
+  color: "white"
+};
+
+const primaryBtn = {
+  marginTop: 10,
+  padding: 12,
+  borderRadius: 10,
+  background: "#7c3aed",
+  border: "none",
+  color: "white",
+  fontWeight: "bold"
+};
+
+const jobsGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
+  gap: 15
+};
+
+const jobCard = {
+  background: "#0f172a",
+  padding: 16,
+  borderRadius: 12
+};
+
+const jobTop = {
+  display: "flex",
+  justifyContent: "space-between",
+  marginBottom: 8
+};
+
+const jobMeta = {
+  display: "flex",
+  justifyContent: "space-between",
+  fontSize: 12
+};
+
+const muted = { color: "#94a3b8", fontSize: 12 };
+
+const divider = {
+  height: 1,
+  background: "#1e293b",
+  margin: "10px 0"
 };
