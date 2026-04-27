@@ -82,6 +82,22 @@ export default function Dashboard() {
     setLoading(false);
   }
 
+  async function generatePDF() {
+  const res = await fetch("/api/generate-pdf", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ jobId }),
+  });
+
+  const data = await res.json();
+
+  if (data.url) {
+    window.open(data.url, "_blank");
+  }
+}
+
   function StatusBadge({ status }) {
     const colors = {
       uploaded: "#64748b",
