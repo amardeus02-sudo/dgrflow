@@ -4,7 +4,6 @@ import { useRouter } from "next/router";
 
 export default function Admin() {
   const router = useRouter();
-
   const [jobs, setJobs] = useState([]);
   const [form, setForm] = useState({});
 
@@ -25,11 +24,7 @@ export default function Admin() {
   }
 
   async function fetchJobs() {
-    const { data } = await supabase
-      .from("jobs")
-      .select("*")
-      .order("created_at", { ascending: false });
-
+    const { data } = await supabase.from("jobs").select("*");
     setJobs(data || []);
   }
 
@@ -59,41 +54,66 @@ export default function Admin() {
     return result;
   }
 
-  async function save(id) {
+  async function generatePDF(id) {
     let data = form[id];
     if (!data) return alert("Fill classification");
 
     data = autoClassify(data);
     const job = jobs.find(j => j.id === id);
 
-    // 📄 HTML PROFISSIONAL IMO STYLE
     const html = `
     <html>
     <head>
       <style>
         body {
-          font-family: Arial;
+          font-family: Arial, sans-serif;
+          font-size: 12px;
           padding: 20px;
         }
+
         h1 {
           text-align: center;
+          font-size: 16px;
+          margin-bottom: 20px;
         }
+
+        .row {
+          display: flex;
+          width: 100%;
+        }
+
         .box {
           border: 1px solid black;
-          padding: 10px;
-          margin-bottom: 10px;
+          padding: 6px;
+          box-sizing: border-box;
         }
+
+        .half {
+          width: 50%;
+        }
+
+        .full {
+          width: 100%;
+        }
+
+        .small {
+          font-size: 10px;
+        }
+
         table {
           width: 100%;
           border-collapse: collapse;
+          margin-top: 10px;
         }
-        td, th {
+
+        th, td {
           border: 1px solid black;
-          padding: 5px;
-          font-size: 12px;
+          padding: 6px;
+          text-align: left;
         }
-        .small {
-          font-size: 10px;
+
+        .signature {
+          height: 60px;
         }
       </style>
     </head>
@@ -102,23 +122,32 @@ export default function Admin() {
 
       <h1>Shipper’s Declaration for Dangerous Goods</h1>
 
-      <div class="box">
-        <strong>Shipper:</strong> ${job.company}<br/>
-        <strong>Consignee:</strong> ${job.customer_email}
+      <div class="row">
+        <div class="box half">
+          <strong>Shipper</strong><br/>
+          ${job.company || "-"}
+        </div>
+
+        <div class="box half">
+          <strong>Consignee</strong><br/>
+          ${job.customer_email || "-"}
+        </div>
       </div>
 
-      <div class="box">
-        <strong>Transport:</strong> Passenger and Cargo Aircraft
+      <div class="box full">
+        <strong>Transport Details</strong><br/>
+        Passenger and Cargo Aircraft
       </div>
 
       <table>
         <tr>
-          <th>UN</th>
+          <th>UN Number</th>
           <th>Proper Shipping Name</th>
           <th>Class</th>
-          <th>PG</th>
-          <th>Qty</th>
+          <th>Packing Group</th>
+          <th>Quantity</th>
         </tr>
+
         <tr>
           <td>${data.un_number || "-"}</td>
           <td>${job.product_name || "-"}</td>
@@ -128,29 +157,42 @@ export default function Admin() {
         </tr>
       </table>
 
-      <div class="box small">
-        EMS: ${data.ems || "-"} <br/>
-        Limited Quantity: ${data.limited_quantity || "-"} <br/>
-        Flammable: ${data.flammable || "-"} <br/>
-        Aerosol: ${data.aerosol || "-"} <br/>
+      <div class="box full small">
+        EMS: ${data.ems || "-"}<br/>
+        Limited Quantity: ${data.limited_quantity || "-"}<br/>
+        Flammable: ${data.flammable || "-"}<br/>
+        Aerosol: ${data.aerosol || "-"}<br/>
         Flash Point: ${data.flash_point || "-"} °C
       </div>
 
-      <div class="box small">
-        I hereby declare that the contents of this consignment are fully and accurately described.
+      <div class="box full small">
+        I hereby declare that the contents of this consignment are fully and accurately described above and are in all respects in proper condition for transport according to applicable international regulations.
       </div>
 
-      <div class="box">
-        Signature: __________________________ <br/>
-        Date: ______________________________
+      <div class="row">
+        <div class="box half signature">
+          Name / Title
+        </div>
+
+        <div class="box half signature">
+          Signature / Date
+        </div>
       </div>
 
     </body>
     </html>
     `;
 
-    const blob = new Blob([html], { type: "text/html" });
-    const filePath = `result_${Date.now()}.html`;
+    const res = await fetch("/api/generate-pdf", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ html })
+    });
+
+    const blob = await res.blob();
+    const filePath = `result_${Date.now()}.pdf`;
 
     await supabase.storage.from("results").upload(filePath, blob);
 
@@ -162,7 +204,7 @@ export default function Admin() {
       })
       .eq("id", id);
 
-    alert("Documento IMO style gerado 🚀");
+    alert("IMO-style PDF gerado 🚀");
 
     fetchJobs();
   }
@@ -177,11 +219,11 @@ export default function Admin() {
 
           <input name="un_number" placeholder="UN Number" onChange={(e) => handleChange(e, job.id)} />
           <input name="hazard_class" placeholder="Class" onChange={(e) => handleChange(e, job.id)} />
-          <input name="packing_group" placeholder="PG" onChange={(e) => handleChange(e, job.id)} />
+          <input name="packing_group" placeholder="Packing Group" onChange={(e) => handleChange(e, job.id)} />
           <input name="ems" placeholder="EMS" onChange={(e) => handleChange(e, job.id)} />
 
           <select name="limited_quantity" onChange={(e) => handleChange(e, job.id)}>
-            <option value="">LQ</option>
+            <option value="">Limited Quantity</option>
             <option value="yes">Yes</option>
             <option value="no">No</option>
           </select>
@@ -198,8 +240,8 @@ export default function Admin() {
             <option value="no">No</option>
           </select>
 
-          <button onClick={() => save(job.id)}>
-            Generate IMO Document
+          <button onClick={() => generatePDF(job.id)}>
+            Generate IMO PDF
           </button>
         </div>
       ))}
