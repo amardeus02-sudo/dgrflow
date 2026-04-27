@@ -11,13 +11,16 @@ export default function Admin() {
 
   useEffect(() => {
     init();
-    loadPDF();
+
+    if (typeof window !== "undefined") {
+      loadPDF();
+    }
   }, []);
 
   async function init() {
     const { data } = await supabase.auth.getUser();
 
-    if (!data.user) return router.push("/login");
+    if (!data?.user) return router.push("/login");
 
     if (data.user.email !== "amardeus02@gmail.com") {
       return router.push("/dashboard");
@@ -35,7 +38,10 @@ export default function Admin() {
     const script = document.createElement("script");
     script.src =
       "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+
     script.onload = () => setPdfReady(true);
+    script.onerror = () => alert("Erro ao carregar PDF lib");
+
     document.body.appendChild(script);
   }
 
@@ -53,8 +59,8 @@ export default function Admin() {
       ...form,
       [id]: {
         ...form[id],
-        [e.target.name]: e.target.value
-      }
+        [e.target.name]: e.target.value,
+      },
     });
   }
 
@@ -75,13 +81,13 @@ export default function Admin() {
   }
 
   async function save(id) {
-    if (!pdfReady) return alert("PDF loading...");
+    if (!pdfReady) return alert("PDF ainda carregando...");
 
     let data = form[id];
     if (!data) return alert("Fill classification");
 
     data = autoClassify(data);
-    const job = jobs.find(j => j.id === id);
+    const job = jobs.find((j) => j.id === id);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -90,7 +96,12 @@ export default function Admin() {
 
     // HEADER
     doc.setFontSize(14);
-    doc.text("Shipper’s Declaration for Dangerous Goods", 105, y, { align: "center" });
+    doc.text(
+      "Shipper’s Declaration for Dangerous Goods",
+      105,
+      y,
+      { align: "center" }
+    );
 
     y += 10;
 
@@ -105,10 +116,11 @@ export default function Admin() {
 
     y += 25;
 
-    // TRANSPORT INFO
-    doc.rect(10, y, 190, 10);
-    doc.text("Transport Details", 12, y + 6);
-    y += 15;
+    // AIRCRAFT TYPE
+    doc.text("Aircraft Type:", 12, y);
+    doc.text("Passenger and Cargo Aircraft", 60, y);
+
+    y += 10;
 
     // TABLE HEADER
     doc.rect(10, y, 190, 10);
@@ -132,7 +144,7 @@ export default function Admin() {
 
     y += 15;
 
-    // EXTRA INFO
+    // EXTRA BOX
     doc.rect(10, y, 190, 25);
 
     doc.text(`EMS: ${data.ems || "-"}`, 12, y + 6);
@@ -143,7 +155,7 @@ export default function Admin() {
     y += 30;
 
     // DECLARATION
-    doc.rect(10, y, 190, 30);
+    doc.rect(10, y, 190, 35);
 
     doc.setFontSize(9);
     doc.text(
@@ -153,12 +165,17 @@ export default function Admin() {
       { maxWidth: 180 }
     );
 
-    y += 35;
+    y += 40;
 
     // SIGNATURE
-    doc.text("Name / Signature:", 12, y);
-    doc.text("Date:", 150, y);
+    doc.text("Name / Title:", 12, y);
+    doc.text("Place / Date:", 120, y);
 
+    y += 10;
+
+    doc.text("Signature:", 12, y);
+
+    // SAVE
     const pdfBlob = doc.output("blob");
     const filePath = `result_${Date.now()}.pdf`;
 
@@ -173,22 +190,22 @@ export default function Admin() {
       .update({
         ...data,
         result_file: filePath,
-        status: "done"
+        status: "done",
       })
       .eq("id", id);
 
     if (error) return alert(error.message);
 
-    alert("Shipping Paper gerado 🚀");
+    alert("Shipping Paper profissional gerado 🚀");
 
     fetchJobs();
   }
 
   return (
-    <div style={{ padding: 40, color: "white" }}>
+    <div style={{ padding: 40 }}>
       <h1>Admin - DG Classification</h1>
 
-      {jobs.map(job => (
+      {jobs.map((job) => (
         <div key={job.id} style={{ marginBottom: 30 }}>
           <h3>{job.product_name}</h3>
 
