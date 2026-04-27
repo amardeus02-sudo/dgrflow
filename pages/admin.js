@@ -66,38 +66,32 @@ export default function Admin() {
     <head>
       <style>
         body {
-          font-family: Arial, sans-serif;
-          font-size: 12px;
-          padding: 20px;
+          font-family: Arial;
+          font-size: 11px;
+          padding: 15px;
         }
 
-        h1 {
+        .title {
           text-align: center;
-          font-size: 16px;
-          margin-bottom: 20px;
+          font-weight: bold;
+          font-size: 14px;
+          margin-bottom: 10px;
         }
 
-        .row {
-          display: flex;
-          width: 100%;
+        .grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 5px;
         }
 
         .box {
           border: 1px solid black;
-          padding: 6px;
-          box-sizing: border-box;
-        }
-
-        .half {
-          width: 50%;
+          padding: 5px;
+          min-height: 40px;
         }
 
         .full {
-          width: 100%;
-        }
-
-        .small {
-          font-size: 10px;
+          grid-column: span 2;
         }
 
         table {
@@ -108,35 +102,52 @@ export default function Admin() {
 
         th, td {
           border: 1px solid black;
-          padding: 6px;
+          padding: 5px;
           text-align: left;
         }
 
+        .footer {
+          margin-top: 15px;
+          border: 1px solid black;
+          padding: 10px;
+        }
+
         .signature {
-          height: 60px;
+          margin-top: 20px;
+          display: flex;
+          justify-content: space-between;
+        }
+
+        .sig-box {
+          width: 45%;
+          border-top: 1px solid black;
+          padding-top: 5px;
+          text-align: center;
         }
       </style>
     </head>
 
     <body>
 
-      <h1>Shipper’s Declaration for Dangerous Goods</h1>
+      <div class="title">
+        SHIPPER'S DECLARATION FOR DANGEROUS GOODS
+      </div>
 
-      <div class="row">
-        <div class="box half">
+      <div class="grid">
+        <div class="box">
           <strong>Shipper</strong><br/>
           ${job.company || "-"}
         </div>
 
-        <div class="box half">
+        <div class="box">
           <strong>Consignee</strong><br/>
           ${job.customer_email || "-"}
         </div>
-      </div>
 
-      <div class="box full">
-        <strong>Transport Details</strong><br/>
-        Passenger and Cargo Aircraft
+        <div class="box full">
+          <strong>Transport Details</strong><br/>
+          Passenger and Cargo Aircraft
+        </div>
       </div>
 
       <table>
@@ -157,26 +168,22 @@ export default function Admin() {
         </tr>
       </table>
 
-      <div class="box full small">
-        EMS: ${data.ems || "-"}<br/>
-        Limited Quantity: ${data.limited_quantity || "-"}<br/>
-        Flammable: ${data.flammable || "-"}<br/>
-        Aerosol: ${data.aerosol || "-"}<br/>
+      <div class="footer">
+        EMS: ${data.ems || "-"} |
+        Limited Quantity: ${data.limited_quantity || "-"} |
+        Flammable: ${data.flammable || "-"} |
+        Aerosol: ${data.aerosol || "-"} |
         Flash Point: ${data.flash_point || "-"} °C
       </div>
 
-      <div class="box full small">
-        I hereby declare that the contents of this consignment are fully and accurately described above and are in all respects in proper condition for transport according to applicable international regulations.
+      <div class="footer">
+        I hereby declare that the contents of this consignment are fully and accurately described above
+        and are in all respects in proper condition for transport according to applicable regulations.
       </div>
 
-      <div class="row">
-        <div class="box half signature">
-          Name / Title
-        </div>
-
-        <div class="box half signature">
-          Signature / Date
-        </div>
+      <div class="signature">
+        <div class="sig-box">Name / Title</div>
+        <div class="sig-box">Signature / Date</div>
       </div>
 
     </body>
@@ -204,7 +211,7 @@ export default function Admin() {
       })
       .eq("id", id);
 
-    alert("IMO-style PDF gerado 🚀");
+    alert("IMO OFFICIAL PDF gerado 🚀");
 
     fetchJobs();
   }
@@ -219,29 +226,11 @@ export default function Admin() {
 
           <input name="un_number" placeholder="UN Number" onChange={(e) => handleChange(e, job.id)} />
           <input name="hazard_class" placeholder="Class" onChange={(e) => handleChange(e, job.id)} />
-          <input name="packing_group" placeholder="Packing Group" onChange={(e) => handleChange(e, job.id)} />
+          <input name="packing_group" placeholder="PG" onChange={(e) => handleChange(e, job.id)} />
           <input name="ems" placeholder="EMS" onChange={(e) => handleChange(e, job.id)} />
 
-          <select name="limited_quantity" onChange={(e) => handleChange(e, job.id)}>
-            <option value="">Limited Quantity</option>
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
-
-          <select name="flammable" onChange={(e) => handleChange(e, job.id)}>
-            <option value="">Flammable</option>
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
-
-          <select name="aerosol" onChange={(e) => handleChange(e, job.id)}>
-            <option value="">Aerosol</option>
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
-
           <button onClick={() => generatePDF(job.id)}>
-            Generate IMO PDF
+            Generate Official PDF
           </button>
         </div>
       ))}
