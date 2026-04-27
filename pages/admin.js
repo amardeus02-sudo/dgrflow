@@ -200,7 +200,6 @@ export default function Admin() {
 
     const blob = await res.blob();
     const filePath = `result_${Date.now()}.pdf`;
-
     await supabase.storage.from("results").upload(filePath, blob);
 
     await supabase.from("jobs")
