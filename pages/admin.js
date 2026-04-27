@@ -7,14 +7,9 @@ export default function Admin() {
 
   const [jobs, setJobs] = useState([]);
   const [form, setForm] = useState({});
-  const [pdfReady, setPdfReady] = useState(false);
 
   useEffect(() => {
     init();
-
-    if (typeof window !== "undefined") {
-      loadPDF();
-    }
   }, []);
 
   async function init() {
@@ -27,22 +22,6 @@ export default function Admin() {
     }
 
     fetchJobs();
-  }
-
-  function loadPDF() {
-    if (window.jspdf) {
-      setPdfReady(true);
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src =
-      "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
-
-    script.onload = () => setPdfReady(true);
-    script.onerror = () => alert("Erro ao carregar PDF lib");
-
-    document.body.appendChild(script);
   }
 
   async function fetchJobs() {
@@ -59,8 +38,8 @@ export default function Admin() {
       ...form,
       [id]: {
         ...form[id],
-        [e.target.name]: e.target.value,
-      },
+        [e.target.name]: e.target.value
+      }
     });
   }
 
@@ -81,122 +60,109 @@ export default function Admin() {
   }
 
   async function save(id) {
-    if (!pdfReady) return alert("PDF ainda carregando...");
-
     let data = form[id];
     if (!data) return alert("Fill classification");
 
     data = autoClassify(data);
-    const job = jobs.find((j) => j.id === id);
+    const job = jobs.find(j => j.id === id);
 
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
+    // 📄 HTML PROFISSIONAL IMO STYLE
+    const html = `
+    <html>
+    <head>
+      <style>
+        body {
+          font-family: Arial;
+          padding: 20px;
+        }
+        h1 {
+          text-align: center;
+        }
+        .box {
+          border: 1px solid black;
+          padding: 10px;
+          margin-bottom: 10px;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        td, th {
+          border: 1px solid black;
+          padding: 5px;
+          font-size: 12px;
+        }
+        .small {
+          font-size: 10px;
+        }
+      </style>
+    </head>
 
-    let y = 10;
+    <body>
 
-    // HEADER
-    doc.setFontSize(14);
-    doc.text(
-      "Shipper’s Declaration for Dangerous Goods",
-      105,
-      y,
-      { align: "center" }
-    );
+      <h1>Shipper’s Declaration for Dangerous Goods</h1>
 
-    y += 10;
+      <div class="box">
+        <strong>Shipper:</strong> ${job.company}<br/>
+        <strong>Consignee:</strong> ${job.customer_email}
+      </div>
 
-    // SHIPPER / CONSIGNEE
-    doc.rect(10, y, 90, 20);
-    doc.text("Shipper", 12, y + 5);
-    doc.text(job.company || "-", 12, y + 12);
+      <div class="box">
+        <strong>Transport:</strong> Passenger and Cargo Aircraft
+      </div>
 
-    doc.rect(110, y, 90, 20);
-    doc.text("Consignee", 112, y + 5);
-    doc.text(job.customer_email || "-", 112, y + 12);
+      <table>
+        <tr>
+          <th>UN</th>
+          <th>Proper Shipping Name</th>
+          <th>Class</th>
+          <th>PG</th>
+          <th>Qty</th>
+        </tr>
+        <tr>
+          <td>${data.un_number || "-"}</td>
+          <td>${job.product_name || "-"}</td>
+          <td>${data.hazard_class || "-"}</td>
+          <td>${data.packing_group || "-"}</td>
+          <td>${job.quantity || "-"}</td>
+        </tr>
+      </table>
 
-    y += 25;
+      <div class="box small">
+        EMS: ${data.ems || "-"} <br/>
+        Limited Quantity: ${data.limited_quantity || "-"} <br/>
+        Flammable: ${data.flammable || "-"} <br/>
+        Aerosol: ${data.aerosol || "-"} <br/>
+        Flash Point: ${data.flash_point || "-"} °C
+      </div>
 
-    // AIRCRAFT TYPE
-    doc.text("Aircraft Type:", 12, y);
-    doc.text("Passenger and Cargo Aircraft", 60, y);
+      <div class="box small">
+        I hereby declare that the contents of this consignment are fully and accurately described.
+      </div>
 
-    y += 10;
+      <div class="box">
+        Signature: __________________________ <br/>
+        Date: ______________________________
+      </div>
 
-    // TABLE HEADER
-    doc.rect(10, y, 190, 10);
+    </body>
+    </html>
+    `;
 
-    doc.text("UN", 12, y + 6);
-    doc.text("Proper Shipping Name", 30, y + 6);
-    doc.text("Class", 110, y + 6);
-    doc.text("PG", 130, y + 6);
-    doc.text("Qty", 150, y + 6);
+    const blob = new Blob([html], { type: "text/html" });
+    const filePath = `result_${Date.now()}.html`;
 
-    y += 10;
+    await supabase.storage.from("results").upload(filePath, blob);
 
-    // TABLE ROW
-    doc.rect(10, y, 190, 10);
-
-    doc.text(data.un_number || "-", 12, y + 6);
-    doc.text(job.product_name || "-", 30, y + 6);
-    doc.text(data.hazard_class || "-", 110, y + 6);
-    doc.text(data.packing_group || "-", 130, y + 6);
-    doc.text(job.quantity ? job.quantity.toString() : "-", 150, y + 6);
-
-    y += 15;
-
-    // EXTRA BOX
-    doc.rect(10, y, 190, 25);
-
-    doc.text(`EMS: ${data.ems || "-"}`, 12, y + 6);
-    doc.text(`Limited Qty: ${data.limited_quantity || "-"}`, 12, y + 12);
-    doc.text(`Flammable: ${data.flammable || "-"}`, 100, y + 6);
-    doc.text(`Aerosol: ${data.aerosol || "-"}`, 100, y + 12);
-
-    y += 30;
-
-    // DECLARATION
-    doc.rect(10, y, 190, 35);
-
-    doc.setFontSize(9);
-    doc.text(
-      "I hereby declare that the contents of this consignment are fully and accurately described above and are in all respects in proper condition for transport according to applicable regulations.",
-      12,
-      y + 10,
-      { maxWidth: 180 }
-    );
-
-    y += 40;
-
-    // SIGNATURE
-    doc.text("Name / Title:", 12, y);
-    doc.text("Place / Date:", 120, y);
-
-    y += 10;
-
-    doc.text("Signature:", 12, y);
-
-    // SAVE
-    const pdfBlob = doc.output("blob");
-    const filePath = `result_${Date.now()}.pdf`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("results")
-      .upload(filePath, pdfBlob);
-
-    if (uploadError) return alert(uploadError.message);
-
-    const { error } = await supabase
-      .from("jobs")
+    await supabase.from("jobs")
       .update({
         ...data,
         result_file: filePath,
-        status: "done",
+        status: "done"
       })
       .eq("id", id);
 
-    if (error) return alert(error.message);
-
-    alert("Shipping Paper profissional gerado 🚀");
+    alert("Documento IMO style gerado 🚀");
 
     fetchJobs();
   }
@@ -205,7 +171,7 @@ export default function Admin() {
     <div style={{ padding: 40 }}>
       <h1>Admin - DG Classification</h1>
 
-      {jobs.map((job) => (
+      {jobs.map(job => (
         <div key={job.id} style={{ marginBottom: 30 }}>
           <h3>{job.product_name}</h3>
 
@@ -233,7 +199,7 @@ export default function Admin() {
           </select>
 
           <button onClick={() => save(job.id)}>
-            Generate Shipping Paper
+            Generate IMO Document
           </button>
         </div>
       ))}
