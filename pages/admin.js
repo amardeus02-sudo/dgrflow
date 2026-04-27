@@ -199,7 +199,19 @@ export default function Admin() {
     });
 
     const blob = await res.blob();
+
+    // 🔥 DOWNLOAD AUTOMÁTICO
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `IMO_${job.product_name || "document"}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+    // salva no supabase
     const filePath = `result_${Date.now()}.pdf`;
+
     await supabase.storage.from("results").upload(filePath, blob);
 
     await supabase.from("jobs")
@@ -210,7 +222,7 @@ export default function Admin() {
       })
       .eq("id", id);
 
-    alert("IMO OFFICIAL PDF gerado 🚀");
+    alert("PDF gerado e baixado 🚀");
 
     fetchJobs();
   }
@@ -227,6 +239,26 @@ export default function Admin() {
           <input name="hazard_class" placeholder="Class" onChange={(e) => handleChange(e, job.id)} />
           <input name="packing_group" placeholder="PG" onChange={(e) => handleChange(e, job.id)} />
           <input name="ems" placeholder="EMS" onChange={(e) => handleChange(e, job.id)} />
+
+          <select name="limited_quantity" onChange={(e) => handleChange(e, job.id)}>
+            <option value="">Limited Quantity</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+
+          <select name="flammable" onChange={(e) => handleChange(e, job.id)}>
+            <option value="">Flammable</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+
+          <select name="aerosol" onChange={(e) => handleChange(e, job.id)}>
+            <option value="">Aerosol</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+
+          <input name="flash_point" placeholder="Flash Point °C" onChange={(e) => handleChange(e, job.id)} />
 
           <button onClick={() => generatePDF(job.id)}>
             Generate Official PDF
