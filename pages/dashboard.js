@@ -6,10 +6,12 @@ export default function Dashboard() {
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // criar job ao abrir
   useEffect(() => {
     createJob();
   }, []);
 
+  // polling
   useEffect(() => {
     if (!jobId) return;
 
@@ -39,7 +41,9 @@ export default function Dashboard() {
 
     await fetch("/api/read-sds", {
       method: "POST",
-      headers: { "x-job-id": jobId },
+      headers: {
+        "x-job-id": jobId,
+      },
       body: file,
     });
 
@@ -62,6 +66,22 @@ export default function Dashboard() {
     setLoading(false);
   }
 
+  async function validate() {
+    if (!jobId) return;
+
+    setLoading(true);
+
+    await fetch("/api/validate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ jobId }),
+    });
+
+    setLoading(false);
+  }
+
   function StatusBadge({ status }) {
     const colors = {
       uploaded: "#64748b",
@@ -71,11 +91,13 @@ export default function Dashboard() {
     };
 
     return (
-      <span style={{
-        background: colors[status] || "#333",
-        padding: "6px 12px",
-        borderRadius: 6
-      }}>
+      <span
+        style={{
+          background: colors[status] || "#333",
+          padding: "6px 12px",
+          borderRadius: 6,
+        }}
+      >
         {status}
       </span>
     );
@@ -83,10 +105,12 @@ export default function Dashboard() {
 
   return (
     <div style={container}>
-      <h1 style={title}>DGRFlow</h1>
+      <h1 style={title}>🚀 DGRFlow Dashboard</h1>
 
       {/* UPLOAD */}
       <div style={card}>
+        <h3>Upload SDS</h3>
+
         <input
           type="file"
           onChange={(e) => setFile(e.target.files[0])}
@@ -98,7 +122,7 @@ export default function Dashboard() {
             disabled={!file || loading}
             style={btn}
           >
-            Read SDS
+            📄 Read SDS
           </button>
 
           <button
@@ -106,7 +130,15 @@ export default function Dashboard() {
             disabled={!job || job.status !== "parsed" || loading}
             style={btnPurple}
           >
-            Classify
+            🤖 Classify
+          </button>
+
+          <button
+            onClick={validate}
+            disabled={!job || job.status !== "classified" || loading}
+            style={btnGreen}
+          >
+            🛡️ Validate DG
           </button>
         </div>
       </div>
@@ -122,7 +154,7 @@ export default function Dashboard() {
       {/* RESULTADOS */}
       {job?.status === "classified" && (
         <div style={card}>
-          <h3>Classification</h3>
+          <h3>📦 Classification</h3>
 
           <div style={grid}>
             <Field label="UN Number" value={job.un_number} />
@@ -131,12 +163,41 @@ export default function Dashboard() {
             <Field label="Packing Group" value={job.packing_group} />
             <Field label="Flash Point" value={job.flash_point} />
             <Field label="EMS" value={job.ems} />
-            <Field label="Transport" value={job.transport_mode} />
+            <Field label="Transport Mode" value={job.transport_mode} />
           </div>
         </div>
       )}
 
-      {loading && <p style={{ marginTop: 20 }}>Processing...</p>}
+      {/* VALIDATION */}
+      {job?.validation && (
+        <div style={card}>
+          <h3>🛡️ Validation</h3>
+
+          <p>
+            Status:{" "}
+            {job.validation.valid ? "✅ Valid" : "❌ Invalid"}
+          </p>
+
+          {job.validation.errors?.map((e, i) => (
+            <p key={i} style={{ color: "red" }}>
+              ❌ {e}
+            </p>
+          ))}
+
+          {job.validation.warnings?.map((w, i) => (
+            <p key={i} style={{ color: "orange" }}>
+              ⚠️ {w}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {/* LOADING */}
+      {loading && (
+        <div style={loadingBox}>
+          ⏳ Processing...
+        </div>
+      )}
     </div>
   );
 }
@@ -159,31 +220,31 @@ const container = {
   color: "white",
   minHeight: "100vh",
   padding: 40,
-  fontFamily: "Arial"
+  fontFamily: "Arial",
 };
 
 const title = {
-  marginBottom: 20
+  marginBottom: 20,
 };
 
 const card = {
   background: "#0f172a",
   padding: 20,
   borderRadius: 10,
-  marginBottom: 20
+  marginBottom: 20,
 };
 
 const grid = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(200px,1fr))",
   gap: 10,
-  marginTop: 15
+  marginTop: 15,
 };
 
 const field = {
   background: "#1e293b",
   padding: 10,
-  borderRadius: 6
+  borderRadius: 6,
 };
 
 const btn = {
@@ -193,10 +254,22 @@ const btn = {
   border: "none",
   borderRadius: 6,
   color: "white",
-  cursor: "pointer"
+  cursor: "pointer",
 };
 
 const btnPurple = {
   ...btn,
-  background: "#7c3aed"
+  background: "#7c3aed",
+};
+
+const btnGreen = {
+  ...btn,
+  background: "#22c55e",
+};
+
+const loadingBox = {
+  marginTop: 20,
+  padding: 15,
+  background: "#1e293b",
+  borderRadius: 8,
 };
