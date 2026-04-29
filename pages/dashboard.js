@@ -1,4 +1,4 @@
-```js
+```js id="h9m2xq"
 import { useState, useEffect } from "react";
 
 export default function Dashboard() {
@@ -8,12 +8,10 @@ export default function Dashboard() {
   const [jobData, setJobData] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // 🚀 cria job automático
   useEffect(() => {
     createJob();
   }, []);
 
-  // 🚀 criar job
   async function createJob() {
 
     try {
@@ -26,39 +24,38 @@ export default function Dashboard() {
 
       console.log("CREATE JOB:", data);
 
-      setJobId(data.id);
+      if (data.id) {
+        setJobId(data.id);
+      }
 
     } catch (err) {
 
       console.error(err);
-      alert("Create job error");
+
+      alert("Create job failed");
     }
   }
 
-  // 🚀 carregar dados do job
- async function loadJob() {
+  async function loadJob(currentJobId) {
 
-  if (!jobId) return;
+    try {
 
-  try {
+      const res = await fetch(
+        "/api/get-job?id=" + currentJobId
+      );
 
-    const res = await fetch(
-      "/api/get-job?id=" + jobId
-    );
+      const data = await res.json();
 
-    const data = await res.json();
+      console.log("JOB DATA:", data);
 
-    console.log("JOB DATA:", data);
+      setJobData(data);
 
-    setJobData(data);
+    } catch (err) {
 
-  } catch (err) {
-
-    console.error(err);
+      console.error(err);
+    }
   }
-}
 
-  // 🚀 READ SDS
   async function handleReadSDS() {
 
     try {
@@ -69,7 +66,7 @@ export default function Dashboard() {
       }
 
       if (!jobId) {
-        alert("Job not created");
+        alert("No job ID");
         return;
       }
 
@@ -80,10 +77,13 @@ export default function Dashboard() {
       formData.append("file", file);
       formData.append("jobId", jobId);
 
-      const res = await fetch("/api/read-sds", {
-        method: "POST",
-        body: formData,
-      });
+      const res = await fetch(
+        "/api/read-sds",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       const data = await res.json();
 
@@ -92,7 +92,8 @@ export default function Dashboard() {
       if (!res.ok) {
 
         alert(
-          data.error || "Read SDS error"
+          data.error ||
+          "Read SDS failed"
         );
 
         setLoading(false);
@@ -101,7 +102,7 @@ export default function Dashboard() {
 
       alert("SDS parsed successfully");
 
-      await loadJob();
+      await loadJob(jobId);
 
       setLoading(false);
 
@@ -115,27 +116,30 @@ export default function Dashboard() {
     }
   }
 
-  // 🚀 CLASSIFY
   async function handleClassify() {
 
     try {
 
       if (!jobId) {
-        alert("Missing jobId");
+        alert("No job ID");
         return;
       }
 
       setLoading(true);
 
-      const res = await fetch("/api/classify", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jobId,
-        }),
-      });
+      const res = await fetch(
+        "/api/classify",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            jobId,
+          }),
+        }
+      );
 
       const data = await res.json();
 
@@ -154,7 +158,7 @@ export default function Dashboard() {
 
       alert("Classification complete");
 
-      await loadJob();
+      await loadJob(jobId);
 
       setLoading(false);
 
@@ -168,7 +172,6 @@ export default function Dashboard() {
     }
   }
 
-  // 🚀 VALIDATE DG
   async function handleValidateDG() {
 
     if (!jobData) {
@@ -203,7 +206,6 @@ export default function Dashboard() {
     alert("DG Validation Passed ✅");
   }
 
-  // 🚀 GENERATE PDF
   async function handleGeneratePDF() {
 
     try {
@@ -261,35 +263,13 @@ export default function Dashboard() {
   }
 
   return (
-    <div
-      style={{
-        background: "#020617",
-        minHeight: "100vh",
-        color: "white",
-        padding: 40,
-        fontFamily: "Arial",
-      }}
-    >
+    <div style={styles.page}>
 
-      <h1
-        style={{
-          marginBottom: 30,
-          fontSize: 48,
-        }}
-      >
+      <h1 style={styles.title}>
         🚀 DGRFlow Dashboard
       </h1>
 
-      {/* UPLOAD */}
-
-      <div
-        style={{
-          background: "#0f172a",
-          padding: 25,
-          borderRadius: 14,
-          marginBottom: 25,
-        }}
-      >
+      <div style={styles.card}>
 
         <h2>Upload SDS</h2>
 
@@ -301,39 +281,32 @@ export default function Dashboard() {
           }
         />
 
-        <div
-          style={{
-            marginTop: 20,
-            display: "flex",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
+        <div style={styles.buttons}>
 
           <button
+            style={styles.blue}
             onClick={handleReadSDS}
-            style={btnBlue}
           >
             📄 Read SDS
           </button>
 
           <button
+            style={styles.purple}
             onClick={handleClassify}
-            style={btnPurple}
           >
             🎭 Classify
           </button>
 
           <button
+            style={styles.green}
             onClick={handleValidateDG}
-            style={btnGreen}
           >
             🛡 Validate DG
           </button>
 
           <button
+            style={styles.orange}
             onClick={handleGeneratePDF}
-            style={btnOrange}
           >
             📄 Generate PDF
           </button>
@@ -342,15 +315,7 @@ export default function Dashboard() {
 
       </div>
 
-      {/* STATUS */}
-
-      <div
-        style={{
-          background: "#0f172a",
-          padding: 25,
-          borderRadius: 14,
-        }}
-      >
+      <div style={styles.card}>
 
         <h2>Status</h2>
 
@@ -359,53 +324,46 @@ export default function Dashboard() {
         )}
 
         {jobData && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns:
-                "repeat(auto-fit,minmax(220px,1fr))",
-              gap: 15,
-              marginTop: 20,
-            }}
-          >
 
-            <Card
-              title="UN Number"
+          <div style={styles.grid}>
+
+            <Info
+              label="UN Number"
               value={jobData.un_number}
             />
 
-            <Card
-              title="Technical Name"
+            <Info
+              label="Technical Name"
               value={jobData.technical_name}
             />
 
-            <Card
-              title="Hazard Class"
+            <Info
+              label="Hazard Class"
               value={jobData.hazard_class}
             />
 
-            <Card
-              title="Packing Group"
+            <Info
+              label="Packing Group"
               value={jobData.packing_group}
             />
 
-            <Card
-              title="Flash Point"
+            <Info
+              label="Flash Point"
               value={jobData.flash_point}
             />
 
-            <Card
-              title="EMS"
+            <Info
+              label="EMS"
               value={jobData.ems}
             />
 
-            <Card
-              title="Transport"
+            <Info
+              label="Transport"
               value={jobData.transport_mode}
             />
 
-            <Card
-              title="Status"
+            <Info
+              label="Status"
               value={jobData.status}
             />
 
@@ -418,67 +376,111 @@ export default function Dashboard() {
   );
 }
 
-// 🚀 CARD
-
-function Card({ title, value }) {
+function Info({ label, value }) {
 
   return (
-    <div
-      style={{
-        background: "#1e293b",
-        padding: 18,
-        borderRadius: 12,
-      }}
-    >
-      <div
-        style={{
-          opacity: 0.7,
-          marginBottom: 8,
-        }}
-      >
-        {title}
+    <div style={styles.infoCard}>
+
+      <div style={styles.infoLabel}>
+        {label}
       </div>
 
-      <div
-        style={{
-          fontWeight: "bold",
-          fontSize: 18,
-        }}
-      >
+      <div style={styles.infoValue}>
         {value || "-"}
       </div>
+
     </div>
   );
 }
 
-// 🚀 BUTTONS
+const styles = {
 
-const baseBtn = {
-  border: "none",
-  padding: "14px 22px",
-  borderRadius: 10,
-  color: "white",
-  cursor: "pointer",
-  fontWeight: "bold",
-};
+  page: {
+    background: "#020617",
+    minHeight: "100vh",
+    color: "white",
+    padding: 40,
+    fontFamily: "Arial",
+  },
 
-const btnBlue = {
-  ...baseBtn,
-  background: "#0ea5e9",
-};
+  title: {
+    fontSize: 42,
+    marginBottom: 30,
+  },
 
-const btnPurple = {
-  ...baseBtn,
-  background: "#7c3aed",
-};
+  card: {
+    background: "#0f172a",
+    padding: 25,
+    borderRadius: 14,
+    marginBottom: 25,
+  },
 
-const btnGreen = {
-  ...baseBtn,
-  background: "#16a34a",
-};
+  buttons: {
+    marginTop: 20,
+    display: "flex",
+    gap: 12,
+    flexWrap: "wrap",
+  },
 
-const btnOrange = {
-  ...baseBtn,
-  background: "#ea580c",
+  grid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit,minmax(220px,1fr))",
+    gap: 15,
+    marginTop: 20,
+  },
+
+  infoCard: {
+    background: "#1e293b",
+    padding: 18,
+    borderRadius: 12,
+  },
+
+  infoLabel: {
+    opacity: 0.7,
+    marginBottom: 8,
+  },
+
+  infoValue: {
+    fontWeight: "bold",
+    fontSize: 18,
+  },
+
+  blue: {
+    border: "none",
+    background: "#0284c7",
+    color: "white",
+    padding: "12px 20px",
+    borderRadius: 10,
+    cursor: "pointer",
+  },
+
+  purple: {
+    border: "none",
+    background: "#7c3aed",
+    color: "white",
+    padding: "12px 20px",
+    borderRadius: 10,
+    cursor: "pointer",
+  },
+
+  green: {
+    border: "none",
+    background: "#16a34a",
+    color: "white",
+    padding: "12px 20px",
+    borderRadius: 10,
+    cursor: "pointer",
+  },
+
+  orange: {
+    border: "none",
+    background: "#ea580c",
+    color: "white",
+    padding: "12px 20px",
+    borderRadius: 10,
+    cursor: "pointer",
+  },
+
 };
 ```
