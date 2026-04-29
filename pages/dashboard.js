@@ -58,52 +58,58 @@ export default function Dashboard() {
 
   // 📄 READ SDS
   async function readSDS() {
-    try {
-      if (!file) {
-        alert("Upload PDF first");
-        return;
-      }
-
-      if (!jobId) {
-        alert("Job not created");
-        return;
-      }
-
-      setLoading(true);
-
-      const formData = new FormData();
-
-      formData.append("file", file);
-
-      const res = await fetch("/api/read-sds", {
-        method: "POST",
-        headers: {
-          "x-job-id": jobId,
-        },
-        body: formData,
-      });
-
-      const data = await res.json();
-
-      console.log("READ SDS:", data);
-
-      if (!res.ok) {
-        alert(data.error || "Read SDS failed");
-        return;
-      }
-
-      alert("SDS parsed successfully");
-
-      await loadJob();
-
-    } catch (err) {
-      console.error(err);
-      alert("Read SDS error");
-
-    } finally {
-      setLoading(false);
+  try {
+    if (!file) {
+      alert("Upload PDF first");
+      return;
     }
+
+    if (!jobId) {
+      alert("Job not created");
+      return;
+    }
+
+    setLoading(true);
+
+    const formData = new FormData();
+
+    formData.append("file", file);
+
+    const res = await fetch("/api/read-sds", {
+      method: "POST",
+      headers: {
+        "x-job-id": jobId,
+      },
+      body: formData,
+    });
+
+    const data = await res.json();
+
+    console.log("READ SDS RESPONSE:", data);
+
+    if (!res.ok) {
+      alert(
+        data.details ||
+        data.error ||
+        "Read SDS failed"
+      );
+
+      return;
+    }
+
+    alert("SDS parsed successfully");
+
+    await loadJob();
+
+  } catch (err) {
+    console.error(err);
+
+    alert(err.message);
+
+  } finally {
+    setLoading(false);
   }
+}
 
   // 🤖 CLASSIFY
   async function classify() {
