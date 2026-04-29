@@ -36,27 +36,27 @@ export default function Dashboard() {
   }
 
   // 🚀 carregar dados do job
-  async function loadJob() {
+ async function loadJob() {
 
-    if (!jobId) return;
+  if (!jobId) return;
 
-    try {
+  try {
 
-      const res = await fetch(
-        `/api/get-job?id=${jobId}`
-      );
+    const res = await fetch(
+      "/api/get-job?id=" + jobId
+    );
 
-      const data = await res.json();
+    const data = await res.json();
 
-      console.log("JOB DATA:", data);
+    console.log("JOB DATA:", data);
 
-      setJobData(data);
+    setJobData(data);
 
-    } catch (err) {
+  } catch (err) {
 
-      console.error(err);
-    }
+    console.error(err);
   }
+}
 
   // 🚀 READ SDS
   async function handleReadSDS() {
