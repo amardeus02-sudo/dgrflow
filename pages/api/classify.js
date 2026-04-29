@@ -1,5 +1,5 @@
-import { supabase } from "../../lib/supabaseClient";
 import OpenAI from "openai";
+import { supabase } from "../../lib/supabaseClient";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -23,13 +23,16 @@ export default async function handler(req, res) {
       });
     }
 
-    const { data: job, error } = await supabase
+    // 🔥 buscar job
+    const { data: job, error: fetchError } = await supabase
       .from("jobs")
       .select("*")
       .eq("id", jobId)
       .single();
 
-    if (error || !job) {
+    if (fetchError || !job) {
+      console.error(fetchError);
+
       return res.status(404).json({
         error: "Job not found",
       });
@@ -41,10 +44,27 @@ export default async function handler(req, res) {
       });
     }
 
+    // 🔥 limpeza extrema
+    const cleanText = job.sds_text
+      .replace(/\s+/g, " ")
+      .replace(/[^\x00-\x7F]/g, "")
+      .replace(/�/g, "")
+      .trim()
+      .slice(0, 12000);
+
+    // 🔥 prompt blindado
     const prompt = `
-Extract dangerous goods transport data from SDS.
+You are a dangerous goods specialist.
+
+Analyze ONLY this SDS.
 
 Return ONLY valid JSON.
+
+Do NOT explain.
+Do NOT add markdown.
+Do NOT add comments.
+
+JSON FORMAT:
 
 {
   "un_number": "",
@@ -57,73 +77,95 @@ Return ONLY valid JSON.
 }
 
 SDS:
-${job.sds_text}
+
+${cleanText}
 `;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0,
-      messages: [
-        {
-          role: "user",
-          content: prompt,
+    // 🔥 OPENAI
+    const completion =
+      await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        temperature: 0,
+        response_format: {
+          type: "json_object",
         },
-      ],
-    });
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      });
 
-    let aiText = completion.choices[0].message.content;
+    const raw =
+      completion.choices[0].message.content;
 
-    console.log("AI RESPONSE:", aiText);
-
-    aiText = aiText
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
+    console.log("AI RAW:", raw);
 
     let parsed;
 
     try {
-      parsed = JSON.parse(aiText);
+      parsed = JSON.parse(raw);
+
     } catch (jsonErr) {
       console.error("JSON ERROR:", jsonErr);
 
       return res.status(500).json({
         error: "AI returned invalid JSON",
+        raw,
       });
     }
 
-    // 🔥 fallback flash point
+    // 🔥 flash point fallback
     if (!parsed.flash_point) {
-      const match = job.sds_text.match(
-        /flash point[:\s]*([\d\.]+\s?[CF])/i
-      );
+      const flashRegex =
+        /flash point[:\s]*([\-0-9\.]+\s?[CF]?)/i;
+
+      const match = cleanText.match(flashRegex);
 
       if (match) {
         parsed.flash_point = match[1];
       }
     }
 
-    // 🔥 transport mode
-    const sds = job.sds_text.toLowerCase();
+    // 🔥 transport mode fallback
+    const lower = cleanText.toLowerCase();
 
-    if (sds.includes("iata")) {
+    if (lower.includes("iata")) {
       parsed.transport_mode = "AIR";
-    } else if (sds.includes("imdg")) {
+    }
+
+    if (lower.includes("imdg")) {
       parsed.transport_mode = "SEA";
-    } else if (
-      sds.includes("adr") ||
-      sds.includes("rid")
+    }
+
+    if (
+      lower.includes("adr") ||
+      lower.includes("rid")
     ) {
       parsed.transport_mode = "GROUND";
     }
 
-    const { error: updateError } = await supabase
-      .from("jobs")
-      .update({
-        ...parsed,
-        status: "classified",
-      })
-      .eq("id", jobId);
+    // 🔥 salvar classificação
+    const { error: updateError } =
+      await supabase
+        .from("jobs")
+        .update({
+          un_number: parsed.un_number || null,
+          technical_name:
+            parsed.technical_name || null,
+          hazard_class:
+            parsed.hazard_class || null,
+          packing_group:
+            parsed.packing_group || null,
+          ems: parsed.ems || null,
+          flash_point:
+            parsed.flash_point || null,
+          transport_mode:
+            parsed.transport_mode || null,
+          status: "classified",
+        })
+        .eq("id", jobId);
 
     if (updateError) {
       console.error(updateError);
@@ -133,13 +175,18 @@ ${job.sds_text}
       });
     }
 
-    return res.status(200).json(parsed);
+    return res.status(200).json({
+      success: true,
+      data: parsed,
+    });
 
   } catch (err) {
     console.error("CLASSIFY ERROR:", err);
 
     return res.status(500).json({
-      error: err.message || "Classification failed",
+      error:
+        err.message ||
+        "Classification failed",
     });
   }
 }
