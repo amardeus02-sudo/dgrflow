@@ -34,21 +34,47 @@ export default function Dashboard() {
     setJob(data);
   }
 
-  async function readSDS() {
-    if (!file || !jobId) return;
+async function readSDS() {
+  if (!file || !jobId) {
+    alert("Missing file or job");
+    return;
+  }
 
+  try {
     setLoading(true);
 
-    await fetch("/api/read-sds", {
+    const formData = new FormData();
+
+    formData.append("file", file);
+
+    const res = await fetch("/api/read-sds", {
       method: "POST",
       headers: {
         "x-job-id": jobId,
       },
-      body: file,
+      body: formData,
     });
 
+    const data = await res.json();
+
+    console.log("READ SDS:", data);
+
+    if (!res.ok) {
+      alert(data.error || "Read SDS failed");
+      return;
+    }
+
+    alert("SDS parsed successfully");
+
+    await loadJob();
+
+  } catch (err) {
+    console.error(err);
+    alert("Error reading SDS");
+  } finally {
     setLoading(false);
   }
+}
 
   async function classify() {
     if (!jobId) return;
