@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { supabase } from "../../lib/supabaseClient";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY=sb_secret_jqDc-ZG1wocJASKP8hMtlg_lXO5pWuZ,
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 export default async function handler(req, res) {
@@ -15,20 +15,21 @@ export default async function handler(req, res) {
 
     const { jobId } = req.body;
 
-    console.log("CLASSIFY JOB:", jobId);
-
     if (!jobId) {
       return res.status(400).json({
         error: "Missing jobId",
       });
     }
 
+    console.log("CLASSIFY JOB:", jobId);
+
     // 🔥 buscar job
-    const { data: job, error: fetchError } = await supabase
-      .from("jobs")
-      .select("*")
-      .eq("id", jobId)
-      .single();
+    const { data: job, error: fetchError } =
+      await supabase
+        .from("jobs")
+        .select("*")
+        .eq("id", jobId)
+        .single();
 
     if (fetchError || !job) {
       console.error(fetchError);
@@ -44,7 +45,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // 🔥 limpeza extrema
+    // 🔥 limpar texto
     const cleanText = job.sds_text
       .replace(/\s+/g, " ")
       .replace(/[^\x00-\x7F]/g, "")
@@ -52,7 +53,7 @@ export default async function handler(req, res) {
       .trim()
       .slice(0, 12000);
 
-    // 🔥 prompt blindado
+    // 🔥 prompt
     const prompt = `
 You are a dangerous goods specialist.
 
@@ -60,9 +61,9 @@ Analyze ONLY this SDS.
 
 Return ONLY valid JSON.
 
-Do NOT explain.
-Do NOT add markdown.
-Do NOT add comments.
+DO NOT explain.
+DO NOT add markdown.
+DO NOT add comments.
 
 JSON FORMAT:
 
@@ -108,15 +109,15 @@ ${cleanText}
       parsed = JSON.parse(raw);
 
     } catch (jsonErr) {
-      console.error("JSON ERROR:", jsonErr);
+      console.error(jsonErr);
 
       return res.status(500).json({
-        error: "AI returned invalid JSON",
+        error: "Invalid AI JSON",
         raw,
       });
     }
 
-    // 🔥 flash point fallback
+    // 🔥 fallback flash point
     if (!parsed.flash_point) {
       const flashRegex =
         /flash point[:\s]*([\-0-9\.]+\s?[CF]?)/i;
@@ -128,7 +129,7 @@ ${cleanText}
       }
     }
 
-    // 🔥 transport mode fallback
+    // 🔥 transport mode
     const lower = cleanText.toLowerCase();
 
     if (lower.includes("iata")) {
@@ -146,23 +147,32 @@ ${cleanText}
       parsed.transport_mode = "GROUND";
     }
 
-    // 🔥 salvar classificação
+    // 🔥 salvar no banco
     const { error: updateError } =
       await supabase
         .from("jobs")
         .update({
-          un_number: parsed.un_number || null,
+          un_number:
+            parsed.un_number || null,
+
           technical_name:
             parsed.technical_name || null,
+
           hazard_class:
             parsed.hazard_class || null,
+
           packing_group:
             parsed.packing_group || null,
-          ems: parsed.ems || null,
+
+          ems:
+            parsed.ems || null,
+
           flash_point:
             parsed.flash_point || null,
+
           transport_mode:
             parsed.transport_mode || null,
+
           status: "classified",
         })
         .eq("id", jobId);
