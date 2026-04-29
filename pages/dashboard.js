@@ -1,169 +1,226 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function Dashboard() {
   const [file, setFile] = useState(null);
   const [jobId, setJobId] = useState(null);
   const [job, setJob] = useState(null);
+
   const [loading, setLoading] = useState(false);
 
-  // criar job ao abrir
+  // 🚀 cria job automático
   useEffect(() => {
     createJob();
   }, []);
 
-  // polling
+  // 🔄 polling
   useEffect(() => {
     if (!jobId) return;
 
     const interval = setInterval(() => {
       loadJob();
-    }, 2000);
+    }, 2500);
 
     return () => clearInterval(interval);
   }, [jobId]);
 
   async function createJob() {
-    const res = await fetch("/api/create-job", { method: "POST" });
-    const data = await res.json();
-    setJobId(data.id);
+    try {
+      const res = await fetch("/api/create-job", {
+        method: "POST",
+      });
+
+      const data = await res.json();
+
+      console.log("JOB CREATED:", data);
+
+      setJobId(data.id);
+
+    } catch (err) {
+      console.error(err);
+      alert("Failed creating job");
+    }
   }
 
   async function loadJob() {
-    const res = await fetch(`/api/get-job?id=${jobId}`);
-    const data = await res.json();
-    setJob(data);
-  }
+    try {
+      const res = await fetch(`/api/get-job?id=${jobId}`);
 
-async function readSDS() {
-  if (!file || !jobId) {
-    alert("Missing file or job");
-    return;
-  }
+      const data = await res.json();
 
-  try {
-    setLoading(true);
+      console.log("JOB DATA:", data);
 
-    const formData = new FormData();
+      setJob(data);
 
-    formData.append("file", file);
-
-    const res = await fetch("/api/read-sds", {
-      method: "POST",
-      headers: {
-        "x-job-id": jobId,
-      },
-      body: formData,
-    });
-
-    const data = await res.json();
-
-    console.log("READ SDS:", data);
-
-    if (!res.ok) {
-      alert(data.error || "Read SDS failed");
-      return;
+    } catch (err) {
+      console.error(err);
     }
-
-    alert("SDS parsed successfully");
-
-    await loadJob();
-
-  } catch (err) {
-    console.error(err);
-    alert("Error reading SDS");
-  } finally {
-    setLoading(false);
   }
-}
 
+  // 📄 READ SDS
+  async function readSDS() {
+    try {
+      if (!file) {
+        alert("Upload PDF first");
+        return;
+      }
+
+      if (!jobId) {
+        alert("Job not created");
+        return;
+      }
+
+      setLoading(true);
+
+      const formData = new FormData();
+
+      formData.append("file", file);
+
+      const res = await fetch("/api/read-sds", {
+        method: "POST",
+        headers: {
+          "x-job-id": jobId,
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      console.log("READ SDS:", data);
+
+      if (!res.ok) {
+        alert(data.error || "Read SDS failed");
+        return;
+      }
+
+      alert("SDS parsed successfully");
+
+      await loadJob();
+
+    } catch (err) {
+      console.error(err);
+      alert("Read SDS error");
+
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // 🤖 CLASSIFY
   async function classify() {
-  if (!jobId) {
-    alert("Missing jobId");
-    return;
-  }
+    try {
+      if (!jobId) {
+        alert("Missing job");
+        return;
+      }
 
-  try {
-    setLoading(true);
+      setLoading(true);
 
-    const res = await fetch("/api/classify", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ jobId }),
-    });
+      const res = await fetch("/api/classify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          jobId,
+        }),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    console.log("CLASSIFY:", data);
+      console.log("CLASSIFY:", data);
 
-    if (!res.ok) {
-      alert(data.error || "Classification failed");
-      return;
+      if (!res.ok) {
+        alert(data.error || "Classification failed");
+        return;
+      }
+
+      alert("Classification completed");
+
+      await loadJob();
+
+    } catch (err) {
+      console.error(err);
+      alert("Classification error");
+
+    } finally {
+      setLoading(false);
     }
-
-    alert("Classification completed");
-
-    await loadJob();
-
-  } catch (err) {
-    console.error(err);
-    alert("Classification error");
-  } finally {
-    setLoading(false);
-  }
-}
-  async function validate() {
-    if (!jobId) return;
-
-    setLoading(true);
-
-    await fetch("/api/validate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ jobId }),
-    });
-
-    setLoading(false);
   }
 
+  // 🛡️ VALIDATE
+  async function validateDG() {
+    try {
+      setLoading(true);
+
+      const res = await fetch("/api/validate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          jobId,
+        }),
+      });
+
+      const data = await res.json();
+
+      console.log("VALIDATION:", data);
+
+      if (!res.ok) {
+        alert(data.error || "Validation failed");
+        return;
+      }
+
+      alert("Validation completed");
+
+      await loadJob();
+
+    } catch (err) {
+      console.error(err);
+      alert("Validation error");
+
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // 📄 PDF
   async function generatePDF() {
-  const res = await fetch("/api/generate-pdf", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ jobId }),
-  });
+    try {
+      setLoading(true);
 
-  const data = await res.json();
+      const res = await fetch("/api/generate-pdf", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          jobId,
+        }),
+      });
 
-  if (data.url) {
-    window.open(data.url, "_blank");
-  }
-}
+      const data = await res.json();
 
-  function StatusBadge({ status }) {
-    const colors = {
-      uploaded: "#64748b",
-      parsed: "#f59e0b",
-      classified: "#22c55e",
-      error: "#ef4444",
-    };
+      console.log("PDF:", data);
 
-    return (
-      <span
-        style={{
-          background: colors[status] || "#333",
-          padding: "6px 12px",
-          borderRadius: 6,
-        }}
-      >
-        {status}
-      </span>
-    );
+      if (!res.ok) {
+        alert(data.error || "PDF generation failed");
+        return;
+      }
+
+      if (data.url) {
+        window.open(data.url, "_blank");
+      }
+
+      await loadJob();
+
+    } catch (err) {
+      console.error(err);
+      alert("PDF error");
+
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -172,60 +229,69 @@ async function readSDS() {
 
       {/* UPLOAD */}
       <div style={card}>
-        <h3>Upload SDS</h3>
+        <h2>Upload SDS</h2>
 
         <input
           type="file"
+          accept=".pdf"
           onChange={(e) => setFile(e.target.files[0])}
+          style={input}
         />
 
-        <div style={{ marginTop: 15 }}>
+        <div style={buttonRow}>
           <button
             onClick={readSDS}
-            disabled={!file || loading}
-            style={btn}
+            disabled={loading}
+            style={btnBlue}
           >
             📄 Read SDS
           </button>
 
           <button
             onClick={classify}
-            disabled={!job || job.status !== "parsed" || loading}
+            disabled={loading || job?.status !== "parsed"}
             style={btnPurple}
           >
             🤖 Classify
           </button>
 
           <button
-            onClick={validate}
-            disabled={!job || job.status !== "classified" || loading}
+            onClick={validateDG}
+            disabled={loading || job?.status !== "classified"}
             style={btnGreen}
           >
             🛡️ Validate DG
+          </button>
+
+          <button
+            onClick={generatePDF}
+            disabled={loading || !job}
+            style={btnOrange}
+          >
+            📄 Generate PDF
           </button>
         </div>
       </div>
 
       {/* STATUS */}
+      <div style={card}>
+        <h2>Status</h2>
+
+        <StatusBadge status={job?.status} />
+      </div>
+
+      {/* RESULT */}
       {job && (
         <div style={card}>
-          <h3>Status</h3>
-          <StatusBadge status={job.status} />
-        </div>
-      )}
-
-      {/* RESULTADOS */}
-      {job?.status === "classified" && (
-        <div style={card}>
-          <h3>📦 Classification</h3>
+          <h2>Classification Result</h2>
 
           <div style={grid}>
             <Field label="UN Number" value={job.un_number} />
             <Field label="Technical Name" value={job.technical_name} />
             <Field label="Hazard Class" value={job.hazard_class} />
             <Field label="Packing Group" value={job.packing_group} />
-            <Field label="Flash Point" value={job.flash_point} />
             <Field label="EMS" value={job.ems} />
+            <Field label="Flash Point" value={job.flash_point} />
             <Field label="Transport Mode" value={job.transport_mode} />
           </div>
         </div>
@@ -234,24 +300,42 @@ async function readSDS() {
       {/* VALIDATION */}
       {job?.validation && (
         <div style={card}>
-          <h3>🛡️ Validation</h3>
+          <h2>Validation</h2>
 
           <p>
-            Status:{" "}
-            {job.validation.valid ? "✅ Valid" : "❌ Invalid"}
+            Status:
+            {" "}
+            {job.validation.valid
+              ? " ✅ VALID"
+              : " ❌ INVALID"}
           </p>
 
           {job.validation.errors?.map((e, i) => (
-            <p key={i} style={{ color: "red" }}>
+            <p key={i} style={{ color: "#ef4444" }}>
               ❌ {e}
             </p>
           ))}
 
           {job.validation.warnings?.map((w, i) => (
-            <p key={i} style={{ color: "orange" }}>
+            <p key={i} style={{ color: "#f59e0b" }}>
               ⚠️ {w}
             </p>
           ))}
+        </div>
+      )}
+
+      {/* PDF */}
+      {job?.pdf_url && (
+        <div style={card}>
+          <h2>Generated PDF</h2>
+
+          <a
+            href={job.pdf_url}
+            target="_blank"
+            style={pdfLink}
+          >
+            Open PDF
+          </a>
         </div>
       )}
 
@@ -265,7 +349,28 @@ async function readSDS() {
   );
 }
 
-/* COMPONENTES */
+function StatusBadge({ status }) {
+  const colors = {
+    uploaded: "#64748b",
+    parsed: "#f59e0b",
+    classified: "#22c55e",
+    validated: "#3b82f6",
+  };
+
+  return (
+    <div
+      style={{
+        background: colors[status] || "#334155",
+        padding: "10px 16px",
+        borderRadius: 8,
+        display: "inline-block",
+        marginTop: 10,
+      }}
+    >
+      {status || "waiting"}
+    </div>
+  );
+}
 
 function Field({ label, value }) {
   return (
@@ -279,60 +384,85 @@ function Field({ label, value }) {
 /* STYLES */
 
 const container = {
+  minHeight: "100vh",
   background: "#020617",
   color: "white",
-  minHeight: "100vh",
   padding: 40,
   fontFamily: "Arial",
 };
 
 const title = {
-  marginBottom: 20,
+  marginBottom: 30,
 };
 
 const card = {
   background: "#0f172a",
-  padding: 20,
-  borderRadius: 10,
+  padding: 24,
+  borderRadius: 14,
+  marginBottom: 24,
+};
+
+const input = {
+  marginTop: 10,
   marginBottom: 20,
 };
 
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(200px,1fr))",
-  gap: 10,
-  marginTop: 15,
+const buttonRow = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 12,
 };
 
-const field = {
-  background: "#1e293b",
-  padding: 10,
-  borderRadius: 6,
-};
-
-const btn = {
-  padding: 10,
-  marginRight: 10,
-  background: "#38bdf8",
+const btnBase = {
   border: "none",
-  borderRadius: 6,
+  padding: "12px 18px",
+  borderRadius: 8,
   color: "white",
   cursor: "pointer",
 };
 
+const btnBlue = {
+  ...btnBase,
+  background: "#0ea5e9",
+};
+
 const btnPurple = {
-  ...btn,
+  ...btnBase,
   background: "#7c3aed",
 };
 
 const btnGreen = {
-  ...btn,
+  ...btnBase,
   background: "#22c55e",
+};
+
+const btnOrange = {
+  ...btnBase,
+  background: "#f97316",
+};
+
+const grid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
+  gap: 12,
+  marginTop: 20,
+};
+
+const field = {
+  background: "#1e293b",
+  padding: 12,
+  borderRadius: 8,
 };
 
 const loadingBox = {
   marginTop: 20,
-  padding: 15,
   background: "#1e293b",
-  borderRadius: 8,
+  padding: 14,
+  borderRadius: 10,
+};
+
+const pdfLink = {
+  color: "#38bdf8",
+  textDecoration: "none",
+  fontWeight: "bold",
 };
