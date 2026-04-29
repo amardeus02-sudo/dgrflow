@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { supabase } from "../../lib/supabaseClient";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY=sb_secret_jqDc-ZG1wocJASKP8hMtlg_lXO5pWuZ,
 });
 
 export default async function handler(req, res) {
