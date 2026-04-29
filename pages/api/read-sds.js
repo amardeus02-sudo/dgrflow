@@ -10,6 +10,12 @@ export const config = {
 };
 
 export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({
+      error: "Method not allowed",
+    });
+  }
+
   try {
     const jobId = req.headers["x-job-id"];
 
@@ -19,64 +25,79 @@ export default async function handler(req, res) {
       });
     }
 
-    const form = formidable({ multiples: false });
+    const form = formidable({
+      multiples: false,
+      keepExtensions: true,
+    });
 
     form.parse(req, async (err, fields, files) => {
       try {
         if (err) {
-          console.error(err);
+          console.error("FORM PARSE ERROR:", err);
+
           return res.status(500).json({
-            error: "Form parse error",
+            error: "Form parse failed",
           });
         }
 
-        const file = files.file?.[0] || files.file;
+        const uploadedFile = Array.isArray(files.file)
+          ? files.file[0]
+          : files.file;
 
-        if (!file) {
+        if (!uploadedFile) {
           return res.status(400).json({
             error: "No file uploaded",
           });
         }
 
-        const dataBuffer = fs.readFileSync(file.filepath);
+        const fileBuffer = fs.readFileSync(uploadedFile.filepath);
 
-        const pdfData = await pdfParse(dataBuffer);
+        const parsedPdf = await pdfParse(fileBuffer);
 
-        let text = pdfData.text || "";
+        let cleanText = parsedPdf.text || "";
 
         // 🔥 limpeza anti-herança
-        text = text
+        cleanText = cleanText
           .replace(/\s+/g, " ")
           .replace(/[^\x00-\x7F]/g, "")
+          .replace(/�/g, "")
           .trim()
           .slice(0, 15000);
 
-        console.log("PDF TEXT LENGTH:", text.length);
+        console.log("PDF PARSED");
+        console.log("TEXT LENGTH:", cleanText.length);
 
-        const { error } = await supabase
+        if (!cleanText || cleanText.length < 50) {
+          return res.status(400).json({
+            error: "PDF text extraction failed",
+          });
+        }
+
+        const { error: updateError } = await supabase
           .from("jobs")
           .update({
-            sds_text: text,
+            sds_text: cleanText,
+            file_name: uploadedFile.originalFilename,
             status: "parsed",
-            file_name: file.originalFilename,
           })
           .eq("id", jobId);
 
-        if (error) {
-          console.error(error);
+        if (updateError) {
+          console.error("SUPABASE UPDATE ERROR:", updateError);
 
           return res.status(500).json({
-            error: error.message,
+            error: updateError.message,
           });
         }
 
         return res.status(200).json({
           success: true,
-          textLength: text.length,
+          message: "SDS parsed successfully",
+          textLength: cleanText.length,
         });
 
-      } catch (innerErr) {
-        console.error(innerErr);
+      } catch (innerError) {
+        console.error("INNER ERROR:", innerError);
 
         return res.status(500).json({
           error: "PDF processing failed",
@@ -84,11 +105,11 @@ export default async function handler(req, res) {
       }
     });
 
-  } catch (err) {
-    console.error(err);
+  } catch (error) {
+    console.error("READ SDS ERROR:", error);
 
     return res.status(500).json({
-      error: "Read SDS failed",
+      error: "Unexpected server error",
     });
   }
 }
