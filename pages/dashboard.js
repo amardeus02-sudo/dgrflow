@@ -77,11 +77,15 @@ async function readSDS() {
 }
 
   async function classify() {
-    if (!jobId) return;
+  if (!jobId) {
+    alert("Missing jobId");
+    return;
+  }
 
+  try {
     setLoading(true);
 
-    await fetch("/api/classify", {
+    const res = await fetch("/api/classify", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -89,9 +93,26 @@ async function readSDS() {
       body: JSON.stringify({ jobId }),
     });
 
+    const data = await res.json();
+
+    console.log("CLASSIFY:", data);
+
+    if (!res.ok) {
+      alert(data.error || "Classification failed");
+      return;
+    }
+
+    alert("Classification completed");
+
+    await loadJob();
+
+  } catch (err) {
+    console.error(err);
+    alert("Classification error");
+  } finally {
     setLoading(false);
   }
-
+}
   async function validate() {
     if (!jobId) return;
 
