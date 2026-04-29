@@ -1,230 +1,276 @@
-import { useState, useEffect } from "react";
-console.log("CLASSIFY START");
-console.log("BODY:", req.body);
-export default function Dashboard() {
+import OpenAI from "openai";
+import { supabase } from "../../lib/supabaseClient";
 
-  const [file, setFile] = useState(null);
-  const [jobId, setJobId] = useState(null);
-  const [jobData, setJobData] = useState(null);
-  const [loading, setLoading] = useState(false);
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
-  // criar job ao abrir
-  useEffect(() => {
-    createJob();
-  }, []);
+export default async function handler(req, res) {
 
-  async function createJob() {
-    try {
-      const res = await fetch("/api/create-job", {
-        method: "POST"
+  try {
+
+    console.log("🚀 CLASSIFY START");
+
+    // METHOD
+    if (req.method !== "POST") {
+
+      return res.status(405).json({
+        error: "Method not allowed",
       });
-
-      const data = await res.json();
-
-      if (data?.id) {
-        setJobId(data.id);
-        console.log("JOB CREATED:", data.id);
-      }
-
-    } catch (err) {
-      console.error("CREATE JOB ERROR:", err);
-    }
-  }
-
-  async function loadJob() {
-    if (!jobId) return;
-
-    try {
-      const res = await fetch(`/api/get-job?id=${jobId}`);
-      const data = await res.json();
-
-      setJobData(data);
-
-    } catch (err) {
-      console.error("LOAD JOB ERROR:", err);
-    }
-  }
-
-  // 📄 READ SDS
-  async function handleReadSDS() {
-
-    if (!file || !jobId) {
-      alert("Upload file first");
-      return;
     }
 
-    setLoading(true);
+    // BODY
+    console.log("BODY:", req.body);
 
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
+    const { jobId } = req.body;
 
-      const res = await fetch("/api/read-sds", {
-        method: "POST",
-        headers: {
-          "x-job-id": jobId
-        },
-        body: formData
+    if (!jobId) {
+
+      return res.status(400).json({
+        error: "Missing jobId",
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        console.error(data);
-        alert("Read SDS error");
-        return;
-      }
-
-      alert("SDS processed");
-
-      await loadJob();
-
-    } catch (err) {
-      console.error(err);
-      alert("Read SDS failed");
     }
 
-    setLoading(false);
-  }
+    // API KEY
+    console.log(
+      "OPENAI KEY:",
+      process.env.OPENAI_API_KEY
+        ? "FOUND"
+        : "MISSING"
+    );
 
-  // 🧠 CLASSIFY
-  async function handleClassify() {
+    // FETCH JOB
+    const {
+      data: job,
+      error: jobError,
+    } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("id", jobId)
+      .single();
 
-    if (!jobId) return;
+    if (jobError || !job) {
 
-    setLoading(true);
+      console.error("JOB ERROR:", jobError);
 
-    try {
-      const res = await fetch("/api/classify", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ jobId })
+      return res.status(404).json({
+        error: "Job not found",
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        console.error(data);
-        alert("Classification error");
-        return;
-      }
-
-      alert("Classified");
-
-      await loadJob();
-
-    } catch (err) {
-      console.error(err);
-      alert("Classification failed");
     }
 
-    setLoading(false);
-  }
+    console.log("JOB FOUND");
 
-  // 🛡 VALIDATE DG
-  function handleValidate() {
+    // SDS TEXT
+    const sdsText =
+      job.sds_text ||
+      job.raw_text ||
+      "";
 
-    if (!jobData) return;
+    if (!sdsText) {
 
-    const errors = [];
+      console.error("NO SDS TEXT");
 
-    if (!jobData.un_number) errors.push("Missing UN Number");
-    if (!jobData.hazard_class) errors.push("Missing Hazard Class");
-    if (!jobData.packing_group) errors.push("Missing Packing Group");
-
-    if (errors.length > 0) {
-      alert("DG INVALID:\n\n" + errors.join("\n"));
-    } else {
-      alert("DG VALID ✅");
-    }
-  }
-
-  // 📄 GENERATE PDF
-  async function handleGeneratePDF() {
-
-    if (!jobData) return;
-
-    try {
-      const res = await fetch("/api/generate-pdf", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(jobData)
+      return res.status(400).json({
+        error: "No SDS text found",
       });
-
-      const data = await res.json();
-
-      if (data?.url) {
-        window.open(data.url, "_blank");
-      } else {
-        alert("PDF error");
-      }
-
-    } catch (err) {
-      console.error(err);
-      alert("PDF failed");
     }
-  }
 
-  return (
-    <div style={{ padding: 40, background: "#020617", minHeight: "100vh", color: "white" }}>
+    // CLEAN TEXT
+    const cleanText = sdsText
+      .replace(/\s+/g, " ")
+      .replace(/[^\x00-\x7F]/g, "")
+      .replace(/�/g, "")
+      .trim()
+      .slice(0, 12000);
 
-      <h1>🚀 DGRFlow Dashboard</h1>
+    console.log(
+      "TEXT LENGTH:",
+      cleanText.length
+    );
 
-      {/* UPLOAD */}
-      <div style={{ marginTop: 20 }}>
+    // PROMPT
+    const prompt = `
+You are a dangerous goods specialist.
 
-        <input
-          type="file"
-          onChange={(e) => setFile(e.target.files[0])}
-        />
+Analyze ONLY this SDS.
 
-        <div style={{ marginTop: 10 }}>
+Return ONLY valid JSON.
 
-          <button onClick={handleReadSDS} disabled={loading}>
-            📄 Read SDS
-          </button>
+NO markdown.
+NO explanation.
+NO comments.
 
-          <button onClick={handleClassify} style={{ marginLeft: 10 }} disabled={loading}>
-            🧠 Classify
-          </button>
+JSON FORMAT:
 
-          <button onClick={handleValidate} style={{ marginLeft: 10 }}>
-            🛡 Validate DG
-          </button>
-
-          <button onClick={handleGeneratePDF} style={{ marginLeft: 10 }}>
-            📦 Generate PDF
-          </button>
-
-        </div>
-      </div>
-
-      {/* STATUS */}
-      <div style={{ marginTop: 30 }}>
-        <h3>Status</h3>
-        <p>{jobData?.status || "no status"}</p>
-      </div>
-
-      {/* RESULTS */}
-      {jobData && (
-        <div style={{ marginTop: 30 }}>
-
-          <h3>DG Data</h3>
-
-          <p><b>UN:</b> {jobData.un_number}</p>
-          <p><b>Name:</b> {jobData.technical_name}</p>
-          <p><b>Class:</b> {jobData.hazard_class}</p>
-          <p><b>PG:</b> {jobData.packing_group}</p>
-          <p><b>Flash:</b> {jobData.flash_point}</p>
-          <p><b>EMS:</b> {jobData.ems}</p>
-
-        </div>
-      )}
-
-    </div>
-  );
+{
+  "un_number": "",
+  "technical_name": "",
+  "hazard_class": "",
+  "packing_group": "",
+  "ems": "",
+  "flash_point": "",
+  "transport_mode": ""
 }
+
+SDS:
+
+${cleanText}
+`;
+
+    console.log("CALLING OPENAI");
+
+    // OPENAI
+    const completion =
+      await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        temperature: 0,
+        response_format: {
+          type: "json_object",
+        },
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      });
+
+    console.log("OPENAI RESPONSE OK");
+
+    // RAW RESPONSE
+    const raw =
+      completion
+        .choices?.[0]
+        ?.message
+        ?.content || "";
+
+    console.log("RAW AI RESPONSE:");
+    console.log(raw);
+
+    // PARSE
+    let parsed;
+
+    try {
+
+      parsed = JSON.parse(raw);
+
+    } catch (jsonErr) {
+
+      console.error(
+        "JSON PARSE ERROR:",
+        jsonErr
+      );
+
+      return res.status(500).json({
+        error: "Invalid AI JSON",
+        raw,
+      });
+    }
+
+    console.log("JSON PARSED");
+
+    // FLASH POINT FALLBACK
+    if (!parsed.flash_point) {
+
+      const flashRegex =
+        /flash point[:\s]*([\-0-9\.]+\s?[CF]?)/i;
+
+      const match =
+        cleanText.match(flashRegex);
+
+      if (match) {
+
+        parsed.flash_point =
+          match[1];
+      }
+    }
+
+    // TRANSPORT MODE
+    const lower =
+      cleanText.toLowerCase();
+
+    if (lower.includes("iata")) {
+      parsed.transport_mode = "AIR";
+    }
+
+    if (lower.includes("imdg")) {
+      parsed.transport_mode = "SEA";
+    }
+
+    if (
+      lower.includes("adr") ||
+      lower.includes("rid")
+    ) {
+      parsed.transport_mode =
+        "GROUND";
+    }
+
+    // SAVE TO DB
+    const {
+      error: updateError,
+    } = await supabase
+      .from("jobs")
+      .update({
+
+        un_number:
+          parsed.un_number || null,
+
+        technical_name:
+          parsed.technical_name || null,
+
+        hazard_class:
+          parsed.hazard_class || null,
+
+        packing_group:
+          parsed.packing_group || null,
+
+        ems:
+          parsed.ems || null,
+
+        flash_point:
+          parsed.flash_point || null,
+
+        transport_mode:
+          parsed.transport_mode || null,
+
+        status: "classified",
+
+      })
+      .eq("id", jobId);
+
+    if (updateError) {
+
+      console.error(
+        "UPDATE ERROR:",
+        updateError
+      );
+
+      return res.status(500).json({
+        error:
+          updateError.message,
+      });
+    }
+
+    console.log("JOB UPDATED");
+
+    return res.status(200).json({
+      success: true,
+      data: parsed,
+    });
+
+  } catch (err) {
+
+    console.error(
+      "🚨 CLASSIFY ERROR:"
+    );
+
+    console.error(err);
+
+    return res.status(500).json({
+      error:
+        err?.message ||
+        "Classification failed",
+    });
+  }
+}
+```
