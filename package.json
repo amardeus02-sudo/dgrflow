@@ -11,6 +11,7 @@
     "@sendgrid/mail": "^8.1.6",
     "@sparticuz/chromium": "^143.0.4",
     "@supabase/supabase-js": "^2.0.0",
+    "formidable": "^3.5.4",
     "next": "14.1.0",
     "openai": "^6.33.0",
     "pdf-parse": "^2.4.5",
