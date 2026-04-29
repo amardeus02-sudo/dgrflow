@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+```js
+import { useState, useEffect } from "react";
 
 export default function Dashboard() {
+
   const [file, setFile] = useState(null);
   const [jobId, setJobId] = useState(null);
-  const [job, setJob] = useState(null);
-
+  const [jobData, setJobData] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // 🚀 cria job automático
@@ -12,110 +13,115 @@ export default function Dashboard() {
     createJob();
   }, []);
 
-  // 🔄 polling
-  useEffect(() => {
-    if (!jobId) return;
-
-    const interval = setInterval(() => {
-      loadJob();
-    }, 2500);
-
-    return () => clearInterval(interval);
-  }, [jobId]);
-
+  // 🚀 criar job
   async function createJob() {
+
     try {
+
       const res = await fetch("/api/create-job", {
         method: "POST",
       });
 
       const data = await res.json();
 
-      console.log("JOB CREATED:", data);
+      console.log("CREATE JOB:", data);
 
       setJobId(data.id);
 
     } catch (err) {
+
       console.error(err);
-      alert("Failed creating job");
+      alert("Create job error");
     }
   }
 
+  // 🚀 carregar dados do job
   async function loadJob() {
+
+    if (!jobId) return;
+
     try {
-      const res = await fetch(`/api/get-job?id=${jobId}`);
+
+      const res = await fetch(
+        `/api/get-job?id=${jobId}`
+      );
 
       const data = await res.json();
 
       console.log("JOB DATA:", data);
 
-      setJob(data);
+      setJobData(data);
 
     } catch (err) {
+
       console.error(err);
     }
   }
 
-  // 📄 READ SDS
-  async function readSDS() {
-  try {
-    if (!file) {
-      alert("Upload PDF first");
-      return;
-    }
+  // 🚀 READ SDS
+  async function handleReadSDS() {
 
-    if (!jobId) {
-      alert("Job not created");
-      return;
-    }
-
-    setLoading(true);
-
-    const formData = new FormData();
-
-    formData.append("file", file);
-
-    const res = await fetch("/api/read-sds", {
-      method: "POST",
-      headers: {
-        "x-job-id": jobId,
-      },
-      body: formData,
-    });
-
-    const data = await res.json();
-
-    console.log("READ SDS RESPONSE:", data);
-
-    if (!res.ok) {
-      alert(
-        data.details ||
-        data.error ||
-        "Read SDS failed"
-      );
-
-      return;
-    }
-
-    alert("SDS parsed successfully");
-
-    await loadJob();
-
-  } catch (err) {
-    console.error(err);
-
-    alert(err.message);
-
-  } finally {
-    setLoading(false);
-  }
-}
-
-  // 🤖 CLASSIFY
-  async function classify() {
     try {
+
+      if (!file) {
+        alert("Select PDF first");
+        return;
+      }
+
       if (!jobId) {
-        alert("Missing job");
+        alert("Job not created");
+        return;
+      }
+
+      setLoading(true);
+
+      const formData = new FormData();
+
+      formData.append("file", file);
+      formData.append("jobId", jobId);
+
+      const res = await fetch("/api/read-sds", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      console.log("READ SDS:", data);
+
+      if (!res.ok) {
+
+        alert(
+          data.error || "Read SDS error"
+        );
+
+        setLoading(false);
+        return;
+      }
+
+      alert("SDS parsed successfully");
+
+      await loadJob();
+
+      setLoading(false);
+
+    } catch (err) {
+
+      console.error(err);
+
+      alert(err.message);
+
+      setLoading(false);
+    }
+  }
+
+  // 🚀 CLASSIFY
+  async function handleClassify() {
+
+    try {
+
+      if (!jobId) {
+        alert("Missing jobId");
         return;
       }
 
@@ -136,339 +142,343 @@ export default function Dashboard() {
       console.log("CLASSIFY:", data);
 
       if (!res.ok) {
-        alert(data.error || "Classification failed");
+
+        alert(
+          data.error ||
+          "Classification failed"
+        );
+
+        setLoading(false);
         return;
       }
 
-      alert("Classification completed");
+      alert("Classification complete");
 
       await loadJob();
 
-    } catch (err) {
-      console.error(err);
-      alert("Classification error");
+      setLoading(false);
 
-    } finally {
+    } catch (err) {
+
+      console.error(err);
+
+      alert(err.message);
+
       setLoading(false);
     }
   }
 
-  // 🛡️ VALIDATE
-  async function validateDG() {
+  // 🚀 VALIDATE DG
+  async function handleValidateDG() {
+
+    if (!jobData) {
+      alert("No classification data");
+      return;
+    }
+
+    const errors = [];
+
+    if (!jobData.un_number)
+      errors.push("Missing UN Number");
+
+    if (!jobData.hazard_class)
+      errors.push("Missing Hazard Class");
+
+    if (!jobData.packing_group)
+      errors.push("Missing Packing Group");
+
+    if (!jobData.technical_name)
+      errors.push("Missing Technical Name");
+
+    if (errors.length > 0) {
+
+      alert(
+        "DG Validation Errors:\n\n" +
+        errors.join("\n")
+      );
+
+      return;
+    }
+
+    alert("DG Validation Passed ✅");
+  }
+
+  // 🚀 GENERATE PDF
+  async function handleGeneratePDF() {
+
     try {
-      setLoading(true);
 
-      const res = await fetch("/api/validate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jobId,
-        }),
-      });
-
-      const data = await res.json();
-
-      console.log("VALIDATION:", data);
-
-      if (!res.ok) {
-        alert(data.error || "Validation failed");
+      if (!jobData) {
+        alert("No job data");
         return;
       }
 
-      alert("Validation completed");
-
-      await loadJob();
-
-    } catch (err) {
-      console.error(err);
-      alert("Validation error");
-
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // 📄 PDF
-  async function generatePDF() {
-    try {
       setLoading(true);
 
-      const res = await fetch("/api/generate-pdf", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          jobId,
-        }),
-      });
+      const res = await fetch(
+        "/api/generate-pdf",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify(jobData),
+        }
+      );
 
       const data = await res.json();
 
       console.log("PDF:", data);
 
       if (!res.ok) {
-        alert(data.error || "PDF generation failed");
+
+        alert(
+          data.error ||
+          "PDF generation failed"
+        );
+
+        setLoading(false);
         return;
       }
+
+      alert("PDF generated");
 
       if (data.url) {
         window.open(data.url, "_blank");
       }
 
-      await loadJob();
+      setLoading(false);
 
     } catch (err) {
-      console.error(err);
-      alert("PDF error");
 
-    } finally {
+      console.error(err);
+
+      alert(err.message);
+
       setLoading(false);
     }
   }
 
   return (
-    <div style={container}>
-      <h1 style={title}>🚀 DGRFlow Dashboard</h1>
+    <div
+      style={{
+        background: "#020617",
+        minHeight: "100vh",
+        color: "white",
+        padding: 40,
+        fontFamily: "Arial",
+      }}
+    >
+
+      <h1
+        style={{
+          marginBottom: 30,
+          fontSize: 48,
+        }}
+      >
+        🚀 DGRFlow Dashboard
+      </h1>
 
       {/* UPLOAD */}
-      <div style={card}>
+
+      <div
+        style={{
+          background: "#0f172a",
+          padding: 25,
+          borderRadius: 14,
+          marginBottom: 25,
+        }}
+      >
+
         <h2>Upload SDS</h2>
 
         <input
           type="file"
           accept=".pdf"
-          onChange={(e) => setFile(e.target.files[0])}
-          style={input}
+          onChange={(e) =>
+            setFile(e.target.files[0])
+          }
         />
 
-        <div style={buttonRow}>
+        <div
+          style={{
+            marginTop: 20,
+            display: "flex",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+
           <button
-            onClick={readSDS}
-            disabled={loading}
+            onClick={handleReadSDS}
             style={btnBlue}
           >
             📄 Read SDS
           </button>
 
           <button
-            onClick={classify}
-            disabled={loading || job?.status !== "parsed"}
+            onClick={handleClassify}
             style={btnPurple}
           >
-            🤖 Classify
+            🎭 Classify
           </button>
 
           <button
-            onClick={validateDG}
-            disabled={loading || job?.status !== "classified"}
+            onClick={handleValidateDG}
             style={btnGreen}
           >
-            🛡️ Validate DG
+            🛡 Validate DG
           </button>
 
           <button
-            onClick={generatePDF}
-            disabled={loading || !job}
+            onClick={handleGeneratePDF}
             style={btnOrange}
           >
             📄 Generate PDF
           </button>
+
         </div>
+
       </div>
 
       {/* STATUS */}
-      <div style={card}>
+
+      <div
+        style={{
+          background: "#0f172a",
+          padding: 25,
+          borderRadius: 14,
+        }}
+      >
+
         <h2>Status</h2>
 
-        <StatusBadge status={job?.status} />
+        {loading && (
+          <p>Processing...</p>
+        )}
+
+        {jobData && (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(auto-fit,minmax(220px,1fr))",
+              gap: 15,
+              marginTop: 20,
+            }}
+          >
+
+            <Card
+              title="UN Number"
+              value={jobData.un_number}
+            />
+
+            <Card
+              title="Technical Name"
+              value={jobData.technical_name}
+            />
+
+            <Card
+              title="Hazard Class"
+              value={jobData.hazard_class}
+            />
+
+            <Card
+              title="Packing Group"
+              value={jobData.packing_group}
+            />
+
+            <Card
+              title="Flash Point"
+              value={jobData.flash_point}
+            />
+
+            <Card
+              title="EMS"
+              value={jobData.ems}
+            />
+
+            <Card
+              title="Transport"
+              value={jobData.transport_mode}
+            />
+
+            <Card
+              title="Status"
+              value={jobData.status}
+            />
+
+          </div>
+        )}
+
       </div>
 
-      {/* RESULT */}
-      {job && (
-        <div style={card}>
-          <h2>Classification Result</h2>
-
-          <div style={grid}>
-            <Field label="UN Number" value={job.un_number} />
-            <Field label="Technical Name" value={job.technical_name} />
-            <Field label="Hazard Class" value={job.hazard_class} />
-            <Field label="Packing Group" value={job.packing_group} />
-            <Field label="EMS" value={job.ems} />
-            <Field label="Flash Point" value={job.flash_point} />
-            <Field label="Transport Mode" value={job.transport_mode} />
-          </div>
-        </div>
-      )}
-
-      {/* VALIDATION */}
-      {job?.validation && (
-        <div style={card}>
-          <h2>Validation</h2>
-
-          <p>
-            Status:
-            {" "}
-            {job.validation.valid
-              ? " ✅ VALID"
-              : " ❌ INVALID"}
-          </p>
-
-          {job.validation.errors?.map((e, i) => (
-            <p key={i} style={{ color: "#ef4444" }}>
-              ❌ {e}
-            </p>
-          ))}
-
-          {job.validation.warnings?.map((w, i) => (
-            <p key={i} style={{ color: "#f59e0b" }}>
-              ⚠️ {w}
-            </p>
-          ))}
-        </div>
-      )}
-
-      {/* PDF */}
-      {job?.pdf_url && (
-        <div style={card}>
-          <h2>Generated PDF</h2>
-
-          <a
-            href={job.pdf_url}
-            target="_blank"
-            style={pdfLink}
-          >
-            Open PDF
-          </a>
-        </div>
-      )}
-
-      {/* LOADING */}
-      {loading && (
-        <div style={loadingBox}>
-          ⏳ Processing...
-        </div>
-      )}
     </div>
   );
 }
 
-function StatusBadge({ status }) {
-  const colors = {
-    uploaded: "#64748b",
-    parsed: "#f59e0b",
-    classified: "#22c55e",
-    validated: "#3b82f6",
-  };
+// 🚀 CARD
+
+function Card({ title, value }) {
 
   return (
     <div
       style={{
-        background: colors[status] || "#334155",
-        padding: "10px 16px",
-        borderRadius: 8,
-        display: "inline-block",
-        marginTop: 10,
+        background: "#1e293b",
+        padding: 18,
+        borderRadius: 12,
       }}
     >
-      {status || "waiting"}
+      <div
+        style={{
+          opacity: 0.7,
+          marginBottom: 8,
+        }}
+      >
+        {title}
+      </div>
+
+      <div
+        style={{
+          fontWeight: "bold",
+          fontSize: 18,
+        }}
+      >
+        {value || "-"}
+      </div>
     </div>
   );
 }
 
-function Field({ label, value }) {
-  return (
-    <div style={field}>
-      <strong>{label}</strong>
-      <div>{value || "-"}</div>
-    </div>
-  );
-}
+// 🚀 BUTTONS
 
-/* STYLES */
-
-const container = {
-  minHeight: "100vh",
-  background: "#020617",
-  color: "white",
-  padding: 40,
-  fontFamily: "Arial",
-};
-
-const title = {
-  marginBottom: 30,
-};
-
-const card = {
-  background: "#0f172a",
-  padding: 24,
-  borderRadius: 14,
-  marginBottom: 24,
-};
-
-const input = {
-  marginTop: 10,
-  marginBottom: 20,
-};
-
-const buttonRow = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 12,
-};
-
-const btnBase = {
+const baseBtn = {
   border: "none",
-  padding: "12px 18px",
-  borderRadius: 8,
+  padding: "14px 22px",
+  borderRadius: 10,
   color: "white",
   cursor: "pointer",
+  fontWeight: "bold",
 };
 
 const btnBlue = {
-  ...btnBase,
+  ...baseBtn,
   background: "#0ea5e9",
 };
 
 const btnPurple = {
-  ...btnBase,
+  ...baseBtn,
   background: "#7c3aed",
 };
 
 const btnGreen = {
-  ...btnBase,
-  background: "#22c55e",
+  ...baseBtn,
+  background: "#16a34a",
 };
 
 const btnOrange = {
-  ...btnBase,
-  background: "#f97316",
+  ...baseBtn,
+  background: "#ea580c",
 };
-
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
-  gap: 12,
-  marginTop: 20,
-};
-
-const field = {
-  background: "#1e293b",
-  padding: 12,
-  borderRadius: 8,
-};
-
-const loadingBox = {
-  marginTop: 20,
-  background: "#1e293b",
-  padding: 14,
-  borderRadius: 10,
-};
-
-const pdfLink = {
-  color: "#38bdf8",
-  textDecoration: "none",
-  fontWeight: "bold",
-};
+```
