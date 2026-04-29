@@ -9,15 +9,34 @@ export const config = {
   },
 };
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({
-      error: "Method not allowed",
+function parseForm(req) {
+  return new Promise((resolve, reject) => {
+    const form = formidable({
+      multiples: false,
+      keepExtensions: true,
     });
-  }
 
+    form.parse(req, (err, fields, files) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve({ fields, files });
+      }
+    });
+  });
+}
+
+export default async function handler(req, res) {
   try {
+    if (req.method !== "POST") {
+      return res.status(405).json({
+        error: "Method not allowed",
+      });
+    }
+
     const jobId = req.headers["x-job-id"];
+
+    console.log("JOB ID:", jobId);
 
     if (!jobId) {
       return res.status(400).json({
@@ -25,91 +44,70 @@ export default async function handler(req, res) {
       });
     }
 
-    const form = formidable({
-      multiples: false,
-      keepExtensions: true,
+    const { files } = await parseForm(req);
+
+    console.log("FILES:", files);
+
+    const uploadedFile = files.file?.[0] || files.file;
+
+    if (!uploadedFile) {
+      return res.status(400).json({
+        error: "No uploaded file found",
+      });
+    }
+
+    const filePath = uploadedFile.filepath;
+
+    console.log("FILE PATH:", filePath);
+
+    const pdfBuffer = fs.readFileSync(filePath);
+
+    const parsed = await pdfParse(pdfBuffer);
+
+    let text = parsed.text || "";
+
+    text = text
+      .replace(/\s+/g, " ")
+      .replace(/[^\x00-\x7F]/g, "")
+      .replace(/�/g, "")
+      .trim()
+      .slice(0, 15000);
+
+    console.log("TEXT LENGTH:", text.length);
+
+    if (!text || text.length < 20) {
+      return res.status(400).json({
+        error: "Could not extract text from PDF",
+      });
+    }
+
+    const { error } = await supabase
+      .from("jobs")
+      .update({
+        sds_text: text,
+        file_name: uploadedFile.originalFilename,
+        status: "parsed",
+      })
+      .eq("id", jobId);
+
+    if (error) {
+      console.error(error);
+
+      return res.status(500).json({
+        error: error.message,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      textLength: text.length,
     });
 
-    form.parse(req, async (err, fields, files) => {
-      try {
-        if (err) {
-          console.error("FORM PARSE ERROR:", err);
-
-          return res.status(500).json({
-            error: "Form parse failed",
-          });
-        }
-
-        const uploadedFile = Array.isArray(files.file)
-          ? files.file[0]
-          : files.file;
-
-        if (!uploadedFile) {
-          return res.status(400).json({
-            error: "No file uploaded",
-          });
-        }
-
-        const fileBuffer = fs.readFileSync(uploadedFile.filepath);
-
-        const parsedPdf = await pdfParse(fileBuffer);
-
-        let cleanText = parsedPdf.text || "";
-
-        // 🔥 limpeza anti-herança
-        cleanText = cleanText
-          .replace(/\s+/g, " ")
-          .replace(/[^\x00-\x7F]/g, "")
-          .replace(/�/g, "")
-          .trim()
-          .slice(0, 15000);
-
-        console.log("PDF PARSED");
-        console.log("TEXT LENGTH:", cleanText.length);
-
-        if (!cleanText || cleanText.length < 50) {
-          return res.status(400).json({
-            error: "PDF text extraction failed",
-          });
-        }
-
-        const { error: updateError } = await supabase
-          .from("jobs")
-          .update({
-            sds_text: cleanText,
-            file_name: uploadedFile.originalFilename,
-            status: "parsed",
-          })
-          .eq("id", jobId);
-
-        if (updateError) {
-          console.error("SUPABASE UPDATE ERROR:", updateError);
-
-          return res.status(500).json({
-            error: updateError.message,
-          });
-        }
-
-        return res.status(200).json({
-          success: true,
-          message: "SDS parsed successfully",
-          textLength: cleanText.length,
-        });
-
-      } catch (innerError) {
-        console.error("INNER ERROR:", innerError);
-
-        return res.status(500).json({
-          error: "PDF processing failed",
-        });
-      }
-    });
-
-  } catch (error) {
-    console.error("READ SDS ERROR:", error);
+  } catch (err) {
+    console.error("READ SDS ERROR:", err);
 
     return res.status(500).json({
-      error: "Unexpected server error",
+      error: err.message || "Read SDS failed",
     });
   }
 }
