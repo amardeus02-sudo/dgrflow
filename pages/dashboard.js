@@ -1,4 +1,3 @@
-```js id="h9m2xq"
 import { useState, useEffect } from "react";
 
 export default function Dashboard() {
@@ -8,479 +7,223 @@ export default function Dashboard() {
   const [jobData, setJobData] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // criar job ao abrir
   useEffect(() => {
     createJob();
   }, []);
 
   async function createJob() {
-
     try {
-
       const res = await fetch("/api/create-job", {
-        method: "POST",
+        method: "POST"
       });
 
       const data = await res.json();
 
-      console.log("CREATE JOB:", data);
-
-      if (data.id) {
+      if (data?.id) {
         setJobId(data.id);
+        console.log("JOB CREATED:", data.id);
       }
 
     } catch (err) {
-
-      console.error(err);
-
-      alert("Create job failed");
+      console.error("CREATE JOB ERROR:", err);
     }
   }
 
-  async function loadJob(currentJobId) {
+  async function loadJob() {
+    if (!jobId) return;
 
     try {
-
-      const res = await fetch(
-        "/api/get-job?id=" + currentJobId
-      );
-
+      const res = await fetch(`/api/get-job?id=${jobId}`);
       const data = await res.json();
-
-      console.log("JOB DATA:", data);
 
       setJobData(data);
 
     } catch (err) {
-
-      console.error(err);
+      console.error("LOAD JOB ERROR:", err);
     }
   }
 
+  // 📄 READ SDS
   async function handleReadSDS() {
 
-    try {
-
-      if (!file) {
-        alert("Select PDF first");
-        return;
-      }
-
-      if (!jobId) {
-        alert("No job ID");
-        return;
-      }
-
-      setLoading(true);
-
-      const formData = new FormData();
-
-      formData.append("file", file);
-      formData.append("jobId", jobId);
-
-      const res = await fetch(
-        "/api/read-sds",
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-
-      const data = await res.json();
-
-      console.log("READ SDS:", data);
-
-      if (!res.ok) {
-
-        alert(
-          data.error ||
-          "Read SDS failed"
-        );
-
-        setLoading(false);
-        return;
-      }
-
-      alert("SDS parsed successfully");
-
-      await loadJob(jobId);
-
-      setLoading(false);
-
-    } catch (err) {
-
-      console.error(err);
-
-      alert(err.message);
-
-      setLoading(false);
-    }
-  }
-
-  async function handleClassify() {
-
-    try {
-
-      if (!jobId) {
-        alert("No job ID");
-        return;
-      }
-
-      setLoading(true);
-
-      const res = await fetch(
-        "/api/classify",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify({
-            jobId,
-          }),
-        }
-      );
-
-      const data = await res.json();
-
-      console.log("CLASSIFY:", data);
-
-      if (!res.ok) {
-
-        alert(
-          data.error ||
-          "Classification failed"
-        );
-
-        setLoading(false);
-        return;
-      }
-
-      alert("Classification complete");
-
-      await loadJob(jobId);
-
-      setLoading(false);
-
-    } catch (err) {
-
-      console.error(err);
-
-      alert(err.message);
-
-      setLoading(false);
-    }
-  }
-
-  async function handleValidateDG() {
-
-    if (!jobData) {
-      alert("No classification data");
+    if (!file || !jobId) {
+      alert("Upload file first");
       return;
     }
+
+    setLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/read-sds", {
+        method: "POST",
+        headers: {
+          "x-job-id": jobId
+        },
+        body: formData
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error(data);
+        alert("Read SDS error");
+        return;
+      }
+
+      alert("SDS processed");
+
+      await loadJob();
+
+    } catch (err) {
+      console.error(err);
+      alert("Read SDS failed");
+    }
+
+    setLoading(false);
+  }
+
+  // 🧠 CLASSIFY
+  async function handleClassify() {
+
+    if (!jobId) return;
+
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/classify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ jobId })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error(data);
+        alert("Classification error");
+        return;
+      }
+
+      alert("Classified");
+
+      await loadJob();
+
+    } catch (err) {
+      console.error(err);
+      alert("Classification failed");
+    }
+
+    setLoading(false);
+  }
+
+  // 🛡 VALIDATE DG
+  function handleValidate() {
+
+    if (!jobData) return;
 
     const errors = [];
 
-    if (!jobData.un_number)
-      errors.push("Missing UN Number");
-
-    if (!jobData.hazard_class)
-      errors.push("Missing Hazard Class");
-
-    if (!jobData.packing_group)
-      errors.push("Missing Packing Group");
-
-    if (!jobData.technical_name)
-      errors.push("Missing Technical Name");
+    if (!jobData.un_number) errors.push("Missing UN Number");
+    if (!jobData.hazard_class) errors.push("Missing Hazard Class");
+    if (!jobData.packing_group) errors.push("Missing Packing Group");
 
     if (errors.length > 0) {
-
-      alert(
-        "DG Validation Errors:\n\n" +
-        errors.join("\n")
-      );
-
-      return;
+      alert("DG INVALID:\n\n" + errors.join("\n"));
+    } else {
+      alert("DG VALID ✅");
     }
-
-    alert("DG Validation Passed ✅");
   }
 
+  // 📄 GENERATE PDF
   async function handleGeneratePDF() {
 
+    if (!jobData) return;
+
     try {
-
-      if (!jobData) {
-        alert("No job data");
-        return;
-      }
-
-      setLoading(true);
-
-      const res = await fetch(
-        "/api/generate-pdf",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-          body: JSON.stringify(jobData),
-        }
-      );
+      const res = await fetch("/api/generate-pdf", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(jobData)
+      });
 
       const data = await res.json();
 
-      console.log("PDF:", data);
-
-      if (!res.ok) {
-
-        alert(
-          data.error ||
-          "PDF generation failed"
-        );
-
-        setLoading(false);
-        return;
-      }
-
-      alert("PDF generated");
-
-      if (data.url) {
+      if (data?.url) {
         window.open(data.url, "_blank");
+      } else {
+        alert("PDF error");
       }
-
-      setLoading(false);
 
     } catch (err) {
-
       console.error(err);
-
-      alert(err.message);
-
-      setLoading(false);
+      alert("PDF failed");
     }
   }
 
   return (
-    <div style={styles.page}>
+    <div style={{ padding: 40, background: "#020617", minHeight: "100vh", color: "white" }}>
 
-      <h1 style={styles.title}>
-        🚀 DGRFlow Dashboard
-      </h1>
+      <h1>🚀 DGRFlow Dashboard</h1>
 
-      <div style={styles.card}>
-
-        <h2>Upload SDS</h2>
+      {/* UPLOAD */}
+      <div style={{ marginTop: 20 }}>
 
         <input
           type="file"
-          accept=".pdf"
-          onChange={(e) =>
-            setFile(e.target.files[0])
-          }
+          onChange={(e) => setFile(e.target.files[0])}
         />
 
-        <div style={styles.buttons}>
+        <div style={{ marginTop: 10 }}>
 
-          <button
-            style={styles.blue}
-            onClick={handleReadSDS}
-          >
+          <button onClick={handleReadSDS} disabled={loading}>
             📄 Read SDS
           </button>
 
-          <button
-            style={styles.purple}
-            onClick={handleClassify}
-          >
-            🎭 Classify
+          <button onClick={handleClassify} style={{ marginLeft: 10 }} disabled={loading}>
+            🧠 Classify
           </button>
 
-          <button
-            style={styles.green}
-            onClick={handleValidateDG}
-          >
+          <button onClick={handleValidate} style={{ marginLeft: 10 }}>
             🛡 Validate DG
           </button>
 
-          <button
-            style={styles.orange}
-            onClick={handleGeneratePDF}
-          >
-            📄 Generate PDF
+          <button onClick={handleGeneratePDF} style={{ marginLeft: 10 }}>
+            📦 Generate PDF
           </button>
 
         </div>
-
       </div>
 
-      <div style={styles.card}>
-
-        <h2>Status</h2>
-
-        {loading && (
-          <p>Processing...</p>
-        )}
-
-        {jobData && (
-
-          <div style={styles.grid}>
-
-            <Info
-              label="UN Number"
-              value={jobData.un_number}
-            />
-
-            <Info
-              label="Technical Name"
-              value={jobData.technical_name}
-            />
-
-            <Info
-              label="Hazard Class"
-              value={jobData.hazard_class}
-            />
-
-            <Info
-              label="Packing Group"
-              value={jobData.packing_group}
-            />
-
-            <Info
-              label="Flash Point"
-              value={jobData.flash_point}
-            />
-
-            <Info
-              label="EMS"
-              value={jobData.ems}
-            />
-
-            <Info
-              label="Transport"
-              value={jobData.transport_mode}
-            />
-
-            <Info
-              label="Status"
-              value={jobData.status}
-            />
-
-          </div>
-        )}
-
+      {/* STATUS */}
+      <div style={{ marginTop: 30 }}>
+        <h3>Status</h3>
+        <p>{jobData?.status || "no status"}</p>
       </div>
+
+      {/* RESULTS */}
+      {jobData && (
+        <div style={{ marginTop: 30 }}>
+
+          <h3>DG Data</h3>
+
+          <p><b>UN:</b> {jobData.un_number}</p>
+          <p><b>Name:</b> {jobData.technical_name}</p>
+          <p><b>Class:</b> {jobData.hazard_class}</p>
+          <p><b>PG:</b> {jobData.packing_group}</p>
+          <p><b>Flash:</b> {jobData.flash_point}</p>
+          <p><b>EMS:</b> {jobData.ems}</p>
+
+        </div>
+      )}
 
     </div>
   );
 }
-
-function Info({ label, value }) {
-
-  return (
-    <div style={styles.infoCard}>
-
-      <div style={styles.infoLabel}>
-        {label}
-      </div>
-
-      <div style={styles.infoValue}>
-        {value || "-"}
-      </div>
-
-    </div>
-  );
-}
-
-const styles = {
-
-  page: {
-    background: "#020617",
-    minHeight: "100vh",
-    color: "white",
-    padding: 40,
-    fontFamily: "Arial",
-  },
-
-  title: {
-    fontSize: 42,
-    marginBottom: 30,
-  },
-
-  card: {
-    background: "#0f172a",
-    padding: 25,
-    borderRadius: 14,
-    marginBottom: 25,
-  },
-
-  buttons: {
-    marginTop: 20,
-    display: "flex",
-    gap: 12,
-    flexWrap: "wrap",
-  },
-
-  grid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit,minmax(220px,1fr))",
-    gap: 15,
-    marginTop: 20,
-  },
-
-  infoCard: {
-    background: "#1e293b",
-    padding: 18,
-    borderRadius: 12,
-  },
-
-  infoLabel: {
-    opacity: 0.7,
-    marginBottom: 8,
-  },
-
-  infoValue: {
-    fontWeight: "bold",
-    fontSize: 18,
-  },
-
-  blue: {
-    border: "none",
-    background: "#0284c7",
-    color: "white",
-    padding: "12px 20px",
-    borderRadius: 10,
-    cursor: "pointer",
-  },
-
-  purple: {
-    border: "none",
-    background: "#7c3aed",
-    color: "white",
-    padding: "12px 20px",
-    borderRadius: 10,
-    cursor: "pointer",
-  },
-
-  green: {
-    border: "none",
-    background: "#16a34a",
-    color: "white",
-    padding: "12px 20px",
-    borderRadius: 10,
-    cursor: "pointer",
-  },
-
-  orange: {
-    border: "none",
-    background: "#ea580c",
-    color: "white",
-    padding: "12px 20px",
-    borderRadius: 10,
-    cursor: "pointer",
-  },
-
-};
-```
