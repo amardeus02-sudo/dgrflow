@@ -1,6 +1,6 @@
 import formidable from "formidable";
 import fs from "fs";
-import pdfParse from "pdf-parse";
+import pdf from "pdf-parse";
 import { supabase } from "../../lib/supabaseClient";
 
 export const config = {
@@ -17,26 +17,15 @@ function parseForm(req) {
     });
 
     form.parse(req, (err, fields, files) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve({ fields, files });
-      }
+      if (err) reject(err);
+      else resolve({ fields, files });
     });
   });
 }
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({
-        error: "Method not allowed",
-      });
-    }
-
     const jobId = req.headers["x-job-id"];
-
-    console.log("JOB ID:", jobId);
 
     if (!jobId) {
       return res.status(400).json({
@@ -46,41 +35,48 @@ export default async function handler(req, res) {
 
     const { files } = await parseForm(req);
 
-    console.log("FILES:", files);
-
-    const uploadedFile = files.file?.[0] || files.file;
+    const uploadedFile = Array.isArray(files.file)
+      ? files.file[0]
+      : files.file;
 
     if (!uploadedFile) {
       return res.status(400).json({
-        error: "No uploaded file found",
+        error: "No file uploaded",
       });
     }
 
-    const filePath = uploadedFile.filepath;
+    console.log("FILE:", uploadedFile.originalFilename);
 
-    console.log("FILE PATH:", filePath);
+    const dataBuffer = fs.readFileSync(
+      uploadedFile.filepath
+    );
 
-    const pdfBuffer = fs.readFileSync(filePath);
-
-    const parsed = await pdfParse(pdfBuffer);
+    // 🔥 parse PDF
+    const parsed = await pdf(dataBuffer);
 
     let text = parsed.text || "";
 
+    console.log("RAW TEXT LENGTH:", text.length);
+
+    // 🔥 limpeza pesada
     text = text
+      .replace(/\r/g, " ")
+      .replace(/\n/g, " ")
       .replace(/\s+/g, " ")
       .replace(/[^\x00-\x7F]/g, "")
       .replace(/�/g, "")
       .trim()
       .slice(0, 15000);
 
-    console.log("TEXT LENGTH:", text.length);
+    console.log("CLEAN TEXT LENGTH:", text.length);
 
-    if (!text || text.length < 20) {
+    if (!text || text.length < 30) {
       return res.status(400).json({
-        error: "Could not extract text from PDF",
+        error: "PDF has no readable text",
       });
     }
 
+    // 🔥 salvar SDS
     const { error } = await supabase
       .from("jobs")
       .update({
@@ -104,10 +100,11 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    console.error("READ SDS ERROR:", err);
+    console.error("PDF ERROR:", err);
 
     return res.status(500).json({
-      error: err.message || "Read SDS failed",
+      error: "PDF processing failed",
+      details: err.message,
     });
   }
 }
