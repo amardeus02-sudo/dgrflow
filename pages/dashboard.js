@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-
+console.log("CLASSIFY START");
+console.log("BODY:", req.body);
 export default function Dashboard() {
 
   const [file, setFile] = useState(null);
