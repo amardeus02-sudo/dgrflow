@@ -4,13 +4,19 @@
 
 html,
 body {
-  background: black;
+  padding: 0;
+  margin: 0;
+  background: #09090b;
   color: white;
   font-family: Inter, sans-serif;
 }
 
 * {
   box-sizing: border-box;
+}
+
+a {
+  text-decoration: none;
 }
 
 button {
