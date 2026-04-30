@@ -1,276 +1,220 @@
-import OpenAI from "openai";
-import { supabase } from "../../lib/supabaseClient";
+import { useState } from "react";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+export default function Dashboard() {
+  const [file, setFile] = useState(null);
+  const [status, setStatus] = useState("idle");
+  const [result, setResult] = useState(null);
 
-export default async function handler(req, res) {
-
-  try {
-
-    console.log("🚀 CLASSIFY START");
-
-    // METHOD
-    if (req.method !== "POST") {
-
-      return res.status(405).json({
-        error: "Method not allowed",
-      });
+  async function uploadAndRead() {
+    if (!file) {
+      alert("Select SDS file");
+      return;
     }
 
-    // BODY
-    console.log("BODY:", req.body);
-
-    const { jobId } = req.body;
-
-    if (!jobId) {
-
-      return res.status(400).json({
-        error: "Missing jobId",
-      });
-    }
-
-    // API KEY
-    console.log(
-      "OPENAI KEY:",
-      process.env.OPENAI_API_KEY
-        ? "FOUND"
-        : "MISSING"
-    );
-
-    // FETCH JOB
-    const {
-      data: job,
-      error: jobError,
-    } = await supabase
-      .from("jobs")
-      .select("*")
-      .eq("id", jobId)
-      .single();
-
-    if (jobError || !job) {
-
-      console.error("JOB ERROR:", jobError);
-
-      return res.status(404).json({
-        error: "Job not found",
-      });
-    }
-
-    console.log("JOB FOUND");
-
-    // SDS TEXT
-    const sdsText =
-      job.sds_text ||
-      job.raw_text ||
-      "";
-
-    if (!sdsText) {
-
-      console.error("NO SDS TEXT");
-
-      return res.status(400).json({
-        error: "No SDS text found",
-      });
-    }
-
-    // CLEAN TEXT
-    const cleanText = sdsText
-      .replace(/\s+/g, " ")
-      .replace(/[^\x00-\x7F]/g, "")
-      .replace(/�/g, "")
-      .trim()
-      .slice(0, 12000);
-
-    console.log(
-      "TEXT LENGTH:",
-      cleanText.length
-    );
-
-    // PROMPT
-    const prompt = `
-You are a dangerous goods specialist.
-
-Analyze ONLY this SDS.
-
-Return ONLY valid JSON.
-
-NO markdown.
-NO explanation.
-NO comments.
-
-JSON FORMAT:
-
-{
-  "un_number": "",
-  "technical_name": "",
-  "hazard_class": "",
-  "packing_group": "",
-  "ems": "",
-  "flash_point": "",
-  "transport_mode": ""
-}
-
-SDS:
-
-${cleanText}
-`;
-
-    console.log("CALLING OPENAI");
-
-    // OPENAI
-    const completion =
-      await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        temperature: 0,
-        response_format: {
-          type: "json_object",
-        },
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-      });
-
-    console.log("OPENAI RESPONSE OK");
-
-    // RAW RESPONSE
-    const raw =
-      completion
-        .choices?.[0]
-        ?.message
-        ?.content || "";
-
-    console.log("RAW AI RESPONSE:");
-    console.log(raw);
-
-    // PARSE
-    let parsed;
+    setStatus("reading");
 
     try {
+      const formData = new FormData();
+      formData.append("file", file);
 
-      parsed = JSON.parse(raw);
-
-    } catch (jsonErr) {
-
-      console.error(
-        "JSON PARSE ERROR:",
-        jsonErr
-      );
-
-      return res.status(500).json({
-        error: "Invalid AI JSON",
-        raw,
+      const res = await fetch("/api/read-sds", {
+        method: "POST",
+        body: formData,
       });
-    }
 
-    console.log("JSON PARSED");
+      const data = await res.json();
 
-    // FLASH POINT FALLBACK
-    if (!parsed.flash_point) {
+      console.log(data);
 
-      const flashRegex =
-        /flash point[:\s]*([\-0-9\.]+\s?[CF]?)/i;
-
-      const match =
-        cleanText.match(flashRegex);
-
-      if (match) {
-
-        parsed.flash_point =
-          match[1];
+      if (!res.ok) {
+        alert(data.error || "Read SDS failed");
+        setStatus("error");
+        return;
       }
+
+      setResult(data);
+      setStatus("success");
+
+    } catch (err) {
+      console.log(err);
+      alert("Read SDS error");
+      setStatus("error");
     }
-
-    // TRANSPORT MODE
-    const lower =
-      cleanText.toLowerCase();
-
-    if (lower.includes("iata")) {
-      parsed.transport_mode = "AIR";
-    }
-
-    if (lower.includes("imdg")) {
-      parsed.transport_mode = "SEA";
-    }
-
-    if (
-      lower.includes("adr") ||
-      lower.includes("rid")
-    ) {
-      parsed.transport_mode =
-        "GROUND";
-    }
-
-    // SAVE TO DB
-    const {
-      error: updateError,
-    } = await supabase
-      .from("jobs")
-      .update({
-
-        un_number:
-          parsed.un_number || null,
-
-        technical_name:
-          parsed.technical_name || null,
-
-        hazard_class:
-          parsed.hazard_class || null,
-
-        packing_group:
-          parsed.packing_group || null,
-
-        ems:
-          parsed.ems || null,
-
-        flash_point:
-          parsed.flash_point || null,
-
-        transport_mode:
-          parsed.transport_mode || null,
-
-        status: "classified",
-
-      })
-      .eq("id", jobId);
-
-    if (updateError) {
-
-      console.error(
-        "UPDATE ERROR:",
-        updateError
-      );
-
-      return res.status(500).json({
-        error:
-          updateError.message,
-      });
-    }
-
-    console.log("JOB UPDATED");
-
-    return res.status(200).json({
-      success: true,
-      data: parsed,
-    });
-
-  } catch (err) {
-
-    console.error(
-      "🚨 CLASSIFY ERROR:"
-    );
-
-    console.error(err);
-
-    return res.status(500).json({
-      error:
-        err?.message ||
-        "Classification failed",
-    });
   }
+
+  async function classifyDG() {
+    if (!result) {
+      alert("Read SDS first");
+      return;
+    }
+
+    setStatus("classifying");
+
+    try {
+      const res = await fetch("/api/classify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(result),
+      });
+
+      const data = await res.json();
+
+      console.log(data);
+
+      if (!res.ok) {
+        alert(data.error || "Classification failed");
+        return;
+      }
+
+      setResult(data);
+
+      alert("DG classified successfully");
+
+    } catch (err) {
+      console.log(err);
+      alert("Classification error");
+    }
+  }
+
+  async function validateDG() {
+    if (!result) {
+      alert("No DG data");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/create-job", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(result),
+      });
+
+      const data = await res.json();
+
+      console.log(data);
+
+      alert("DG validated");
+
+    } catch (err) {
+      console.log(err);
+      alert("Validation failed");
+    }
+  }
+
+  async function generatePDF() {
+    if (!result) {
+      alert("No data");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/generate-pdf", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(result),
+      });
+
+      const blob = await res.blob();
+
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "IMO_DGD.pdf";
+      a.click();
+
+    } catch (err) {
+      console.log(err);
+      alert("PDF generation failed");
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white p-10">
+
+      <h1 className="text-5xl font-bold mb-10">
+        🚀 DGRFlow Dashboard
+      </h1>
+
+      <div className="bg-slate-900 rounded-2xl p-8 border border-slate-800">
+
+        <h2 className="text-2xl font-bold mb-6">
+          Upload SDS
+        </h2>
+
+        <input
+          type="file"
+          accept=".pdf"
+          onChange={(e) => setFile(e.target.files[0])}
+          className="mb-6 block"
+        />
+
+        <div className="flex flex-wrap gap-4">
+
+          <button
+            onClick={uploadAndRead}
+            className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-xl font-bold"
+          >
+            📄 Read SDS
+          </button>
+
+          <button
+            onClick={classifyDG}
+            className="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-xl font-bold"
+          >
+            😈 Classify
+          </button>
+
+          <button
+            onClick={validateDG}
+            className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-xl font-bold"
+          >
+            🛡 Validate DG
+          </button>
+
+          <button
+            onClick={generatePDF}
+            className="bg-orange-600 hover:bg-orange-700 px-6 py-3 rounded-xl font-bold"
+          >
+            📄 Generate PDF
+          </button>
+
+        </div>
+
+      </div>
+
+      <div className="mt-10 bg-slate-900 rounded-2xl p-8 border border-slate-800">
+
+        <h2 className="text-2xl font-bold mb-4">
+          Status
+        </h2>
+
+        <div className="inline-block bg-slate-700 px-4 py-2 rounded-xl">
+          {status}
+        </div>
+
+      </div>
+
+      {result && (
+        <div className="mt-10 bg-slate-900 rounded-2xl p-8 border border-slate-800">
+
+          <h2 className="text-2xl font-bold mb-4">
+            SDS Data
+          </h2>
+
+          <pre className="overflow-auto text-sm">
+            {JSON.stringify(result, null, 2)}
+          </pre>
+
+        </div>
+      )}
+
+    </div>
+  );
 }
-```
