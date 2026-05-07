@@ -9,6 +9,23 @@ export const config = {
   },
 };
 
+function parseForm(req) {
+  return new Promise((resolve, reject) => {
+    const form = formidable({
+      multiples: false,
+      keepExtensions: true,
+    });
+
+    form.parse(req, (err, fields, files) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve({ fields, files });
+      }
+    });
+  });
+}
+
 export default async function handler(req, res) {
   try {
     console.log("START READ SDS");
@@ -39,14 +56,12 @@ export default async function handler(req, res) {
       uploadedFile.filepath
     );
 
-    // Parse PDF
     const parsed = await pdf(dataBuffer);
 
     let text = parsed.text || "";
 
     console.log("RAW TEXT LENGTH:", text.length);
 
-    // Cleanup
     text = text
       .replace(/\r/g, " ")
       .replace(/\n/g, " ")
@@ -64,7 +79,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Save in Supabase
     const { error } = await supabase
       .from("jobs")
       .update({
