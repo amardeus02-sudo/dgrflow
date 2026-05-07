@@ -1,49 +1,78 @@
-async function uploadSDS(file, jobId) {
+async function handleSDSUpload(file) {
   try {
-    console.log("START SDS UPLOAD");
-    console.log("JOB ID:", jobId);
-
-    if (!jobId) {
-      throw new Error("Missing jobId before SDS upload");
-    }
+    console.log("STARTING SDS FLOW");
 
     if (!file) {
       throw new Error("No file selected");
     }
 
+    // STEP 1 - CREATE JOB
+    const createJobResponse = await fetch("/api/create-job", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+
+    const createJobData = await createJobResponse.json();
+
+    console.log("CREATE JOB RESPONSE:", createJobData);
+
+    if (!createJobResponse.ok) {
+      throw new Error(
+        createJobData?.error || "Failed to create job"
+      );
+    }
+
+    const jobId = createJobData.id;
+
+    if (!jobId) {
+      throw new Error("Job ID was not returned");
+    }
+
+    console.log("JOB ID:", jobId);
+
+    // STEP 2 - BUILD FORM DATA
     const formData = new FormData();
 
     formData.append("file", file);
 
-    const response = await fetch("/api/create-job", {
-  method: "POST",
-});
-
-const data = await response.json();
-
-const jobId = data.id;
+    // STEP 3 - SEND PDF TO READ SDS API
+    const readResponse = await fetch("/api/read-sds", {
+      method: "POST",
+      headers: {
+        "x-job-id": String(jobId),
+      },
+      body: formData,
     });
-  headers: {
-  "x-job-id": jobId,
-}
 
-    const result = await response.json();
+    const readData = await readResponse.json();
 
-    console.log("READ SDS RESPONSE:", result);
+    console.log("READ SDS RESPONSE:", readData);
 
-    if (!response.ok) {
+    if (!readResponse.ok) {
       throw new Error(
-        result?.error ||
-        result?.details ||
-        "Failed to read SDS"
+        readData?.details ||
+        readData?.error ||
+        "Failed to process SDS"
       );
     }
 
-    return result;
+    console.log("SDS SUCCESSFULLY PARSED");
 
-  } catch (err) {
-    console.error("UPLOAD SDS ERROR:", err);
+    return {
+      success: true,
+      jobId,
+      data: readData,
+    };
 
-    throw err;
+  } catch (error) {
+    console.error("HANDLE SDS ERROR:", error);
+
+    return {
+      success: false,
+      error: error.message,
+    };
   }
 }
