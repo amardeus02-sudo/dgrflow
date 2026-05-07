@@ -15,13 +15,17 @@ async function uploadSDS(file, jobId) {
 
     formData.append("file", file);
 
-    const response = await fetch("/api/read-sds", {
-      method: "POST",
-      headers: {
-        "x-job-id": String(jobId),
-      },
-      body: formData,
+    const response = await fetch("/api/create-job", {
+  method: "POST",
+});
+
+const data = await response.json();
+
+const jobId = data.id;
     });
+  headers: {
+  "x-job-id": jobId,
+}
 
     const result = await response.json();
 
