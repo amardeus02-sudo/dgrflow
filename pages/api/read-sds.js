@@ -9,20 +9,6 @@ export const config = {
   },
 };
 
-function parseForm(req) {
-  return new Promise((resolve, reject) => {
-    const form = formidable({
-      multiples: false,
-      keepExtensions: true,
-    });
-
-    form.parse(req, (err, fields, files) => {
-      if (err) reject(err);
-      else resolve({ fields, files });
-    });
-  });
-}
-
 export default async function handler(req, res) {
   try {
     console.log("START READ SDS");
