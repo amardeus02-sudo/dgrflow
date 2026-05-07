@@ -30,15 +30,10 @@ export default async function handler(req, res) {
   try {
     console.log("START READ SDS");
 
-    // Optional job ID
     const jobId = req.headers["x-job-id"] || null;
 
-    console.log("JOB ID:", jobId);
-
-    // Parse upload form
     const { files } = await parseForm(req);
 
-    // Get uploaded file
     const uploadedFile = Array.isArray(files.file)
       ? files.file[0]
       : files.file;
@@ -55,78 +50,76 @@ export default async function handler(req, res) {
       uploadedFile.originalFilename
     );
 
-    // Read PDF buffer
     const dataBuffer = fs.readFileSync(
       uploadedFile.filepath
     );
 
-    // Parse PDF
     const parsed = await pdf(dataBuffer);
 
     let text = parsed.text || "";
 
-    console.log(
-      "RAW TEXT LENGTH:",
-      text.length
-    );
+    console.log("RAW PDF TEXT:");
+    console.log(text.slice(0, 5000));
 
-    // Cleanup text
     text = text
       .replace(/\r/g, " ")
       .replace(/\n/g, " ")
       .replace(/\s+/g, " ")
-      .replace(/[^\x00-\x7F]/g, "")
-      .replace(/�/g, "")
-      .trim()
-      .slice(0, 15000);
+      .trim();
 
-    console.log(
-      "CLEAN TEXT LENGTH:",
-      text.length
-    );
+    // EXTRACTION
+    const unNumberMatch =
+      text.match(/UN\s*(\d{4})/i);
 
-    // Validate readable text
-    if (!text || text.length < 30) {
-      return res.status(400).json({
-        success: false,
-        error: "PDF has no readable text",
-      });
-    }
+    const hazardClassMatch =
+      text.match(
+        /Class\s*[:\-]?\s*([0-9\.]+)/i
+      );
 
-    // Save to Supabase only if jobId exists
+    const packingGroupMatch =
+      text.match(
+        /Packing Group\s*[:\-]?\s*([I|II|III]+)/i
+      );
+
+    const shippingNameMatch =
+      text.match(
+        /Proper Shipping Name\s*[:\-]?\s*([A-Z0-9\s\-]+)/i
+      );
+
+    const result = {
+      unNumber:
+        unNumberMatch?.[1] || "N/A",
+
+      hazardClass:
+        hazardClassMatch?.[1] || "N/A",
+
+      packingGroup:
+        packingGroupMatch?.[1] || "N/A",
+
+      shippingName:
+        shippingNameMatch?.[1] || "N/A",
+
+      preview: text.slice(0, 3000),
+    };
+
+    console.log("EXTRACTED RESULT:");
+    console.log(result);
+
+    // SAVE IF JOB EXISTS
     if (jobId) {
-      const { error } = await supabase
+      await supabase
         .from("jobs")
         .update({
           sds_text: text,
-          file_name:
-            uploadedFile.originalFilename,
+          extracted_data: result,
           status: "parsed",
         })
         .eq("id", jobId);
-
-      if (error) {
-        console.error(
-          "SUPABASE ERROR:",
-          error
-        );
-
-        return res.status(500).json({
-          success: false,
-          error: error.message,
-        });
-      }
     }
 
-    // Success response
     return res.status(200).json({
       success: true,
-      message: "SDS parsed successfully",
-      fileName:
-        uploadedFile.originalFilename,
-      textLength: text.length,
-      preview: text.slice(0, 1000),
-      savedToSupabase: !!jobId,
+      data: result,
     });
 
   } catch (err) {
@@ -134,8 +127,7 @@ export default async function handler(req, res) {
 
     return res.status(500).json({
       success: false,
-      error: "PDF processing failed",
-      details: err.message,
+      error: err.message,
     });
   }
 }
