@@ -1,78 +1,141 @@
-async function handleSDSUpload(file) {
-  try {
-    console.log("STARTING SDS FLOW");
+import formidable from "formidable";
+import fs from "fs";
+import pdf from "pdf-parse";
+import { supabase } from "../../lib/supabaseClient";
 
-    if (!file) {
-      throw new Error("No file selected");
-    }
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
-    // STEP 1 - CREATE JOB
-    const createJobResponse = await fetch("/api/create-job", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({}),
+function parseForm(req) {
+  return new Promise((resolve, reject) => {
+    const form = formidable({
+      multiples: false,
+      keepExtensions: true,
     });
 
-    const createJobData = await createJobResponse.json();
+    form.parse(req, (err, fields, files) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve({ fields, files });
+      }
+    });
+  });
+}
 
-    console.log("CREATE JOB RESPONSE:", createJobData);
+export default async function handler(req, res) {
+  try {
+    console.log("START READ SDS");
 
-    if (!createJobResponse.ok) {
-      throw new Error(
-        createJobData?.error || "Failed to create job"
-      );
-    }
-
-    const jobId = createJobData.id;
-
-    if (!jobId) {
-      throw new Error("Job ID was not returned");
-    }
+    // Optional job ID
+    const jobId = req.headers["x-job-id"] || null;
 
     console.log("JOB ID:", jobId);
 
-    // STEP 2 - BUILD FORM DATA
-    const formData = new FormData();
+    // Parse upload form
+    const { files } = await parseForm(req);
 
-    formData.append("file", file);
+    // Get uploaded file
+    const uploadedFile = Array.isArray(files.file)
+      ? files.file[0]
+      : files.file;
 
-    // STEP 3 - SEND PDF TO READ SDS API
-    const readResponse = await fetch("/api/read-sds", {
-      method: "POST",
-      headers: {
-        "x-job-id": String(jobId),
-      },
-      body: formData,
-    });
-
-    const readData = await readResponse.json();
-
-    console.log("READ SDS RESPONSE:", readData);
-
-    if (!readResponse.ok) {
-      throw new Error(
-        readData?.details ||
-        readData?.error ||
-        "Failed to process SDS"
-      );
+    if (!uploadedFile) {
+      return res.status(400).json({
+        success: false,
+        error: "No file uploaded",
+      });
     }
 
-    console.log("SDS SUCCESSFULLY PARSED");
+    console.log(
+      "FILE:",
+      uploadedFile.originalFilename
+    );
 
-    return {
+    // Read PDF buffer
+    const dataBuffer = fs.readFileSync(
+      uploadedFile.filepath
+    );
+
+    // Parse PDF
+    const parsed = await pdf(dataBuffer);
+
+    let text = parsed.text || "";
+
+    console.log(
+      "RAW TEXT LENGTH:",
+      text.length
+    );
+
+    // Cleanup text
+    text = text
+      .replace(/\r/g, " ")
+      .replace(/\n/g, " ")
+      .replace(/\s+/g, " ")
+      .replace(/[^\x00-\x7F]/g, "")
+      .replace(/�/g, "")
+      .trim()
+      .slice(0, 15000);
+
+    console.log(
+      "CLEAN TEXT LENGTH:",
+      text.length
+    );
+
+    // Validate readable text
+    if (!text || text.length < 30) {
+      return res.status(400).json({
+        success: false,
+        error: "PDF has no readable text",
+      });
+    }
+
+    // Save to Supabase only if jobId exists
+    if (jobId) {
+      const { error } = await supabase
+        .from("jobs")
+        .update({
+          sds_text: text,
+          file_name:
+            uploadedFile.originalFilename,
+          status: "parsed",
+        })
+        .eq("id", jobId);
+
+      if (error) {
+        console.error(
+          "SUPABASE ERROR:",
+          error
+        );
+
+        return res.status(500).json({
+          success: false,
+          error: error.message,
+        });
+      }
+    }
+
+    // Success response
+    return res.status(200).json({
       success: true,
-      jobId,
-      data: readData,
-    };
+      message: "SDS parsed successfully",
+      fileName:
+        uploadedFile.originalFilename,
+      textLength: text.length,
+      preview: text.slice(0, 1000),
+      savedToSupabase: !!jobId,
+    });
 
-  } catch (error) {
-    console.error("HANDLE SDS ERROR:", error);
+  } catch (err) {
+    console.error("READ SDS ERROR:", err);
 
-    return {
+    return res.status(500).json({
       success: false,
-      error: error.message,
-    };
+      error: "PDF processing failed",
+      details: err.message,
+    });
   }
 }
