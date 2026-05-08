@@ -2,6 +2,9 @@ import { useState } from "react";
 
 export default function Dashboard() {
   const [file, setFile] = useState(null);
+  const [sdsText, setSdsText] = useState("");
+const [classification, setClassification] = useState(null);
+const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
