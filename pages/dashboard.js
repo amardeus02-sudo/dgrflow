@@ -3,14 +3,15 @@ import { useState } from "react";
 export default function Dashboard() {
   const [selectedFile, setSelectedFile] = useState(null);
 
-  const [loading, setLoading] = useState(false);
+  const [loadingRead, setLoadingRead] = useState(false);
+  const [loadingClassify, setLoadingClassify] = useState(false);
+  const [loadingValidate, setLoadingValidate] = useState(false);
+  const [loadingGenerate, setLoadingGenerate] = useState(false);
 
   const [sdsText, setSdsText] = useState("");
-
   const [sdsData, setSdsData] = useState(null);
 
   const [classificationResult, setClassificationResult] = useState(null);
-
   const [validationResult, setValidationResult] = useState(null);
 
   const [extractionResult, setExtractionResult] = useState({
@@ -33,10 +34,20 @@ export default function Dashboard() {
 
     setSelectedFile(file);
 
+    // RESET STATES
     setSdsText("");
     setSdsData(null);
     setClassificationResult(null);
     setValidationResult(null);
+
+    setExtractionResult({
+      unNumber: "N/A",
+      hazardClass: "N/A",
+      packingGroup: "N/A",
+      shippingName: "N/A",
+      marinePollutant: "N/A",
+      tunnelCode: "N/A",
+    });
   };
 
   // =========================
@@ -50,7 +61,7 @@ export default function Dashboard() {
     }
 
     try {
-      setLoading(true);
+      setLoadingRead(true);
 
       const formData = new FormData();
 
@@ -61,12 +72,23 @@ export default function Dashboard() {
         body: formData,
       });
 
-const raw = await response.text();
+      const rawText = await response.text();
 
-console.log(raw);
+      console.log("RAW SDS RESPONSE:", rawText);
 
-const data = JSON.parse(raw);
-      console.log("READ SDS RESPONSE:", data);
+      let data;
+
+      try {
+        data = JSON.parse(rawText);
+      } catch (jsonError) {
+        console.error("JSON PARSE ERROR:", jsonError);
+
+        alert("API did not return valid JSON.");
+
+        return;
+      }
+
+      console.log("PARSED SDS DATA:", data);
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to read SDS");
@@ -87,11 +109,11 @@ const data = JSON.parse(raw);
 
       alert("SDS extracted successfully!");
     } catch (error) {
-      console.error(error);
+      console.error("READ SDS ERROR:", error);
 
       alert("SDS extraction failed");
     } finally {
-      setLoading(false);
+      setLoadingRead(false);
     }
   };
 
@@ -100,13 +122,16 @@ const data = JSON.parse(raw);
   // =========================
 
   const handleClassifyDG = async () => {
+    console.log("CLASSIFY CLICKED");
+    console.log("SDS DATA:", sdsData);
+
     if (!sdsData) {
       alert("Please read the SDS first.");
       return;
     }
 
     try {
-      setLoading(true);
+      setLoadingClassify(true);
 
       const response = await fetch("/api/classify", {
         method: "POST",
@@ -116,13 +141,23 @@ const data = JSON.parse(raw);
         body: JSON.stringify(sdsData),
       });
 
-      const raw = await response.text();
+      const rawText = await response.text();
 
-console.log(raw);
+      console.log("RAW CLASSIFICATION RESPONSE:", rawText);
 
-const data = JSON.parse(raw);
+      let data;
 
-      console.log("CLASSIFICATION RESPONSE:", data);
+      try {
+        data = JSON.parse(rawText);
+      } catch (jsonError) {
+        console.error("CLASSIFICATION JSON ERROR:", jsonError);
+
+        alert("Classification API invalid JSON");
+
+        return;
+      }
+
+      console.log("CLASSIFICATION DATA:", data);
 
       if (!response.ok) {
         throw new Error(data.error || "Classification failed");
@@ -132,11 +167,11 @@ const data = JSON.parse(raw);
 
       alert("DG classified successfully!");
     } catch (error) {
-      console.error(error);
+      console.error("CLASSIFICATION ERROR:", error);
 
       alert("Classification failed");
     } finally {
-      setLoading(false);
+      setLoadingClassify(false);
     }
   };
 
@@ -145,13 +180,16 @@ const data = JSON.parse(raw);
   // =========================
 
   const handleValidateDG = async () => {
+    console.log("VALIDATE CLICKED");
+    console.log("CLASSIFICATION RESULT:", classificationResult);
+
     if (!classificationResult) {
       alert("Please classify DG first.");
       return;
     }
 
     try {
-      setLoading(true);
+      setLoadingValidate(true);
 
       const response = await fetch("/api/validate", {
         method: "POST",
@@ -161,13 +199,23 @@ const data = JSON.parse(raw);
         body: JSON.stringify(classificationResult),
       });
 
-     const raw = await response.text();
+      const rawText = await response.text();
 
-console.log(raw);
+      console.log("RAW VALIDATION RESPONSE:", rawText);
 
-const data = JSON.parse(raw);
+      let data;
 
-      console.log("VALIDATION RESPONSE:", data);
+      try {
+        data = JSON.parse(rawText);
+      } catch (jsonError) {
+        console.error("VALIDATION JSON ERROR:", jsonError);
+
+        alert("Validation API invalid JSON");
+
+        return;
+      }
+
+      console.log("VALIDATION DATA:", data);
 
       if (!response.ok) {
         throw new Error(data.error || "Validation failed");
@@ -177,11 +225,11 @@ const data = JSON.parse(raw);
 
       alert("DG validation completed!");
     } catch (error) {
-      console.error(error);
+      console.error("VALIDATION ERROR:", error);
 
       alert("DG validation failed");
     } finally {
-      setLoading(false);
+      setLoadingValidate(false);
     }
   };
 
@@ -190,13 +238,15 @@ const data = JSON.parse(raw);
   // =========================
 
   const handleGenerateIMO = async () => {
+    console.log("GENERATE IMO CLICKED");
+
     if (!validationResult) {
       alert("Please validate DG first.");
       return;
     }
 
     try {
-      setLoading(true);
+      setLoadingGenerate(true);
 
       const response = await fetch("/api/generate-pdf", {
         method: "POST",
@@ -209,6 +259,8 @@ const data = JSON.parse(raw);
           validation: validationResult,
         }),
       });
+
+      console.log("PDF RESPONSE STATUS:", response.status);
 
       if (!response.ok) {
         throw new Error("Failed to generate IMO PDF");
@@ -234,11 +286,11 @@ const data = JSON.parse(raw);
 
       alert("IMO PDF generated successfully!");
     } catch (error) {
-      console.error(error);
+      console.error("PDF GENERATION ERROR:", error);
 
       alert("IMO PDF generation failed");
     } finally {
-      setLoading(false);
+      setLoadingGenerate(false);
     }
   };
 
@@ -306,6 +358,8 @@ const data = JSON.parse(raw);
               </p>
 
               <input
+                id="sds-upload"
+                name="sds-upload"
                 type="file"
                 accept=".pdf"
                 onChange={handleFileChange}
@@ -338,44 +392,34 @@ const data = JSON.parse(raw);
 
               <button
                 onClick={handleReadSDS}
-                disabled={loading}
+                disabled={loadingRead}
                 className="bg-blue-500 hover:bg-blue-600 transition px-5 py-3 rounded-xl font-semibold"
               >
-                Read SDS
+                {loadingRead ? "Reading..." : "Read SDS"}
               </button>
 
-            <button
-  onClick={() => {
-    console.log("CLASSIFY BUTTON CLICKED");
-    handleClassifyDG();
-  }}
-  disabled={loading}
-  className="bg-purple-500 hover:bg-purple-600 transition px-5 py-3 rounded-xl font-semibold"
->
-  Classify DG
-</button>
+              <button
+                onClick={handleClassifyDG}
+                disabled={loadingClassify}
+                className="bg-purple-500 hover:bg-purple-600 transition px-5 py-3 rounded-xl font-semibold"
+              >
+                {loadingClassify ? "Classifying..." : "Classify DG"}
+              </button>
 
               <button
-  onClick={() => {
-    console.log("BUTTON WORKING");
-    console.log("SDS DATA:", sdsData);
-
-    handleClassifyDG();
-  }}
-  disabled={loading}
-  className="bg-purple-500 hover:bg-purple-600 transition px-5 py-3 rounded-xl font-semibold"
->
-  Classify DG
-</button>
-                Validate DG
+                onClick={handleValidateDG}
+                disabled={loadingValidate}
+                className="bg-green-500 hover:bg-green-600 transition px-5 py-3 rounded-xl font-semibold"
+              >
+                {loadingValidate ? "Validating..." : "Validate DG"}
               </button>
 
               <button
                 onClick={handleGenerateIMO}
-                disabled={loading}
+                disabled={loadingGenerate}
                 className="bg-orange-500 hover:bg-orange-600 transition px-5 py-3 rounded-xl font-semibold"
               >
-                Generate IMO PDF
+                {loadingGenerate ? "Generating..." : "Generate IMO PDF"}
               </button>
 
             </div>
@@ -440,7 +484,7 @@ const data = JSON.parse(raw);
                 DG Classification
               </h3>
 
-              <pre className="bg-zinc-900 p-4 rounded-2xl overflow-auto text-sm">
+              <pre className="bg-zinc-900 p-4 rounded-2xl overflow-auto text-sm whitespace-pre-wrap">
                 {JSON.stringify(classificationResult, null, 2)}
               </pre>
             </div>
@@ -453,9 +497,22 @@ const data = JSON.parse(raw);
                 DG Validation
               </h3>
 
-              <pre className="bg-zinc-900 p-4 rounded-2xl overflow-auto text-sm">
+              <pre className="bg-zinc-900 p-4 rounded-2xl overflow-auto text-sm whitespace-pre-wrap">
                 {JSON.stringify(validationResult, null, 2)}
               </pre>
+            </div>
+          )}
+
+          {/* SDS RAW TEXT */}
+          {sdsText && (
+            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
+              <h3 className="text-3xl font-bold mb-6">
+                Extracted SDS Text
+              </h3>
+
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-h-[400px] overflow-y-auto text-zinc-300 whitespace-pre-wrap text-sm">
+                {sdsText}
+              </div>
             </div>
           )}
 
