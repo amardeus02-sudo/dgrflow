@@ -61,8 +61,11 @@ export default function Dashboard() {
         body: formData,
       });
 
-      const data = await response.json();
+const raw = await response.text();
 
+console.log(raw);
+
+const data = JSON.parse(raw);
       console.log("READ SDS RESPONSE:", data);
 
       if (!response.ok) {
@@ -113,7 +116,11 @@ export default function Dashboard() {
         body: JSON.stringify(sdsData),
       });
 
-      const data = await response.json();
+      const raw = await response.text();
+
+console.log(raw);
+
+const data = JSON.parse(raw);
 
       console.log("CLASSIFICATION RESPONSE:", data);
 
@@ -154,7 +161,11 @@ export default function Dashboard() {
         body: JSON.stringify(classificationResult),
       });
 
-      const data = await response.json();
+     const raw = await response.text();
+
+console.log(raw);
+
+const data = JSON.parse(raw);
 
       console.log("VALIDATION RESPONSE:", data);
 
