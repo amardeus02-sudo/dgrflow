@@ -1,57 +1,60 @@
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export default async function handler(req, res) {
   try {
-    const { text } = req.body;
-
-    if (!text) {
-      return res.status(400).json({
-        error: "Missing SDS text",
+    if (req.method !== "POST") {
+      return res.status(405).json({
+        success: false,
+        error: "Method not allowed",
       });
     }
 
-    const prompt = `
-You are a dangerous goods specialist.
+    const body = req.body;
 
-Analyze this SDS and identify:
+    console.log("CLASSIFY INPUT:", body);
 
-- UN Number
-- Proper Shipping Name
-- Hazard Class
-- Packing Group
+    // =========================
+    // MOCK AI CLASSIFICATION
+    // =========================
 
-Return ONLY valid JSON.
-
-SDS:
-${text}
-`;
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0,
-    });
-
-    const result = completion.choices[0].message.content;
-
-    return res.status(200).json({
+    const result = {
       success: true,
-      result,
-    });
+
+      classification: {
+        un_number: body.un_number || "UN1993",
+
+        proper_shipping_name:
+          body.shipping_name || "FLAMMABLE LIQUID, N.O.S.",
+
+        hazard_class:
+          body.hazard_class || "3",
+
+        packing_group:
+          body.packing_group || "II",
+
+        marine_pollutant:
+          body.marine_pollutant || "No",
+
+        tunnel_code:
+          body.tunnel_code || "D/E",
+
+        labels: ["3"],
+
+        segregation: "Away from oxidizers",
+
+        limited_quantity: "5L",
+
+        excepted_quantity: "E2",
+      },
+    };
+
+    console.log("CLASSIFY OUTPUT:", result);
+
+    return res.status(200).json(result);
   } catch (error) {
-    console.error(error);
+    console.error("CLASSIFY API ERROR:", error);
 
     return res.status(500).json({
-      error: "Classification failed",
+      success: false,
+      error: error.message || "Internal server error",
     });
   }
 }
