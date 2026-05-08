@@ -344,13 +344,16 @@ const data = JSON.parse(raw);
                 Read SDS
               </button>
 
-              <button
-                onClick={handleClassifyDG}
-                disabled={loading}
-                className="bg-purple-500 hover:bg-purple-600 transition px-5 py-3 rounded-xl font-semibold"
-              >
-                Classify DG
-              </button>
+            <button
+  onClick={() => {
+    console.log("CLASSIFY BUTTON CLICKED");
+    handleClassifyDG();
+  }}
+  disabled={loading}
+  className="bg-purple-500 hover:bg-purple-600 transition px-5 py-3 rounded-xl font-semibold"
+>
+  Classify DG
+</button>
 
               <button
                 onClick={handleValidateDG}
