@@ -3,14 +3,20 @@ import { useState } from "react";
 export default function Dashboard() {
   const [file, setFile] = useState(null);
   const [sdsText, setSdsText] = useState("");
-const [classification, setClassification] = useState(null);
-const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
+  const [classification, setClassification] = useState(null);
+  const [validation, setValidation] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleReadSDS() {
+  const handleFileChange = (e) => {
+    setFile(e.target.files[0]);
+  };
+
+  // =========================
+  // READ SDS
+  // =========================
+  const handleReadSDS = async () => {
     if (!file) {
-      alert("Upload a PDF first");
+      alert("Upload SDS first");
       return;
     }
 
@@ -20,300 +26,420 @@ const [loading, setLoading] = useState(false);
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch("/api/read-sds", {
+      const res = await fetch("/api/read-sds", {
         method: "POST",
         body: formData,
       });
 
-      const data = await response.json();
+      const data = await res.json();
 
-      if (!response.ok) {
+      if (!data.success) {
         alert(data.error || "Read SDS failed");
         return;
       }
 
-      setResult(data);
+      setSdsText(data.text);
 
-    } catch (err) {
-      console.error(err);
-      alert("Error reading SDS");
+      alert("SDS extracted successfully");
+    } catch (error) {
+      console.error(error);
+      alert("Read SDS error");
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  // =========================
+  // CLASSIFY DG
+  // =========================
+  const handleClassify = async () => {
+    if (!sdsText) {
+      alert("Read SDS first");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const res = await fetch("/api/classify", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: sdsText,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!data.success) {
+        alert(data.error || "Classification failed");
+        return;
+      }
+
+      let parsed;
+
+      try {
+        parsed = JSON.parse(data.result);
+      } catch {
+        parsed = {
+          raw: data.result,
+        };
+      }
+
+      setClassification(parsed);
+
+      alert("DG classified successfully");
+    } catch (error) {
+      console.error(error);
+      alert("Classification error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =========================
+  // VALIDATE DG
+  // =========================
+  const handleValidate = async () => {
+    if (!classification) {
+      alert("Classify DG first");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const res = await fetch("/api/validate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          dg: classification,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!data.success) {
+        alert(data.error || "Validation failed");
+        return;
+      }
+
+      setValidation(data.validation);
+
+      alert("DG validated successfully");
+    } catch (error) {
+      console.error(error);
+      alert("Validation error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =========================
+  // GENERATE PDF
+  // =========================
+  const handleGeneratePDF = async () => {
+    if (!classification) {
+      alert("Classify DG first");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const res = await fetch("/api/generate-pdf", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          dg: classification,
+        }),
+      });
+
+      const blob = await res.blob();
+
+      const url = window.URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "imo-declaration.pdf";
+
+      document.body.appendChild(a);
+
+      a.click();
+
+      a.remove();
+
+      window.URL.revokeObjectURL(url);
+
+      alert("IMO PDF generated");
+    } catch (error) {
+      console.error(error);
+      alert("PDF generation error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <main className="min-h-screen bg-black text-white">
-      
+    <div className="min-h-screen bg-black text-white">
       {/* HEADER */}
-      <header className="border-b border-zinc-800 bg-zinc-950">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          
-          <div className="flex items-center gap-4">
-            <div className="w-11 h-11 rounded-2xl bg-orange-500 flex items-center justify-center font-black text-xl">
-              D
-            </div>
-
-            <div>
-              <h1 className="text-2xl font-bold">
-                DGRFlow
-              </h1>
-
-              <p className="text-zinc-400 text-sm">
-                Dangerous Goods Automation
-              </p>
-            </div>
+      <div className="border-b border-zinc-900 bg-zinc-950">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-orange-500">
+              DGRFlow
+            </h1>
+            <p className="text-zinc-400 text-sm">
+              Dangerous Goods Automation Platform
+            </p>
           </div>
 
-          <button className="bg-orange-500 hover:bg-orange-600 transition px-5 py-3 rounded-2xl font-medium">
+          <button className="bg-orange-500 hover:bg-orange-600 px-5 py-2 rounded-xl font-semibold transition">
             Upgrade Plan
           </button>
-
         </div>
-      </header>
+      </div>
 
-      {/* CONTENT */}
-      <section className="max-w-7xl mx-auto px-6 py-14">
-
-        {/* HERO */}
-        <div className="mb-12">
-          
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-sm mb-6">
+      {/* HERO */}
+      <div className="max-w-7xl mx-auto px-6 py-12">
+        <div className="mb-10">
+          <span className="bg-orange-500/10 text-orange-400 border border-orange-500/20 px-4 py-1 rounded-full text-sm">
             AI Dangerous Goods Platform
-          </div>
+          </span>
 
-          <h2 className="text-5xl font-black leading-tight max-w-4xl">
-            Automate SDS extraction,
-            DG validation and IMO generation.
+          <h2 className="text-5xl font-bold mt-6 leading-tight max-w-4xl">
+            Automate SDS extraction, DG validation and IMO generation.
           </h2>
 
-          <p className="mt-6 text-zinc-400 text-xl max-w-3xl">
+          <p className="text-zinc-400 text-lg mt-5 max-w-2xl">
             Upload Safety Data Sheets and automatically extract transport data with AI.
           </p>
-
         </div>
 
-        {/* GRID */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* MAIN GRID */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* LEFT PANEL */}
+          <div className="lg:col-span-2 bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
 
-          {/* LEFT */}
-          <div className="lg:col-span-2 space-y-8">
+            <h3 className="text-2xl font-bold mb-6">
+              Upload SDS
+            </h3>
 
-            {/* UPLOAD */}
-            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-8">
+            {/* UPLOAD AREA */}
+            <div className="border border-dashed border-zinc-700 rounded-3xl p-10 text-center">
 
-              <h3 className="text-2xl font-bold mb-6">
-                Upload SDS
-              </h3>
+              <div className="w-16 h-16 bg-orange-500/10 border border-orange-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <span className="text-3xl">📄</span>
+              </div>
 
-              <label className="border-2 border-dashed border-zinc-700 rounded-3xl p-12 flex flex-col items-center justify-center text-center hover:border-orange-500 transition cursor-pointer">
+              <h4 className="text-2xl font-bold mb-2">
+                Drag & Drop SDS PDF
+              </h4>
 
-                <div className="w-20 h-20 rounded-3xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-4xl mb-6">
-                  📄
-                </div>
+              <p className="text-zinc-500 mb-6">
+                Upload dangerous goods Safety Data Sheets
+              </p>
 
-                <h4 className="text-2xl font-bold mb-3">
-                  Drag & Drop SDS PDF
-                </h4>
-
-                <p className="text-zinc-400 mb-6">
-                  Upload dangerous goods Safety Data Sheets
-                </p>
-
-                <div className="bg-orange-500 hover:bg-orange-600 transition px-6 py-3 rounded-2xl font-semibold">
-                  Select PDF
-                </div>
-
-                <input
-                  type="file"
-                  accept=".pdf"
-                  className="hidden"
-                  onChange={(e) => setFile(e.target.files[0])}
-                />
-              </label>
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={handleFileChange}
+                className="mb-6"
+              />
 
               {file && (
-                <div className="mt-6 p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
-                  
-                  <div className="flex items-center justify-between">
-                    
-                    <div>
-                      <p className="font-semibold">
-                        {file.name}
-                      </p>
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex justify-between items-center mt-6">
+                  <div>
+                    <p className="font-semibold">
+                      {file.name}
+                    </p>
 
-                      <p className="text-sm text-zinc-400">
-                        PDF ready for processing
-                      </p>
-                    </div>
-
-                    <div className="text-green-400 font-semibold">
-                      READY
-                    </div>
-
+                    <p className="text-zinc-500 text-sm">
+                      PDF ready for processing
+                    </p>
                   </div>
+
+                  <span className="text-green-400 font-bold">
+                    READY
+                  </span>
                 </div>
               )}
-
-              {/* BUTTONS */}
-              <div className="flex flex-wrap gap-4 mt-8">
-
-                <button
-                  onClick={handleReadSDS}
-                  disabled={loading}
-                  className="bg-blue-500 hover:bg-blue-600 transition px-6 py-4 rounded-2xl font-semibold"
-                >
-                  {loading ? "Reading..." : "Read SDS"}
-                </button>
-
-                <button className="bg-purple-500 hover:bg-purple-600 transition px-6 py-4 rounded-2xl font-semibold">
-                  Classify DG
-                </button>
-
-                <button className="bg-green-500 hover:bg-green-600 transition px-6 py-4 rounded-2xl font-semibold">
-                  Validate DG
-                </button>
-
-                <button className="bg-orange-500 hover:bg-orange-600 transition px-6 py-4 rounded-2xl font-semibold">
-                  Generate IMO PDF
-                </button>
-
-              </div>
             </div>
 
-            {/* RESULTS */}
-            {result && (
-              <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-8">
-                
-                <h3 className="text-3xl font-black mb-8">
-                  SDS Extraction Results
-                </h3>
+            {/* BUTTONS */}
+            <div className="flex flex-wrap gap-4 mt-8">
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <button
+                onClick={handleReadSDS}
+                className="bg-blue-600 hover:bg-blue-700 px-5 py-3 rounded-xl font-semibold transition"
+              >
+                {loading ? "Processing..." : "Read SDS"}
+              </button>
 
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                    <p className="text-zinc-400 text-sm mb-2">
-                      UN NUMBER
-                    </p>
+              <button
+                onClick={handleClassify}
+                className="bg-purple-600 hover:bg-purple-700 px-5 py-3 rounded-xl font-semibold transition"
+              >
+                {loading ? "Processing..." : "Classify DG"}
+              </button>
 
-                    <p className="text-3xl font-black text-orange-400">
-                      {result.extracted?.un_number || "N/A"}
-                    </p>
-                  </div>
+              <button
+                onClick={handleValidate}
+                className="bg-green-600 hover:bg-green-700 px-5 py-3 rounded-xl font-semibold transition"
+              >
+                {loading ? "Processing..." : "Validate DG"}
+              </button>
 
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                    <p className="text-zinc-400 text-sm mb-2">
-                      HAZARD CLASS
-                    </p>
-
-                    <p className="text-3xl font-black text-red-400">
-                      {result.extracted?.hazard_class || "N/A"}
-                    </p>
-                  </div>
-
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                    <p className="text-zinc-400 text-sm mb-2">
-                      PACKING GROUP
-                    </p>
-
-                    <p className="text-3xl font-black text-green-400">
-                      {result.extracted?.packing_group || "N/A"}
-                    </p>
-                  </div>
-
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                    <p className="text-zinc-400 text-sm mb-2">
-                      SHIPPING NAME
-                    </p>
-
-                    <p className="text-xl font-bold">
-                      {result.extracted?.proper_shipping_name || "N/A"}
-                    </p>
-                  </div>
-
-                </div>
-
-                {/* SECTION 14 */}
-                <div className="mt-8 bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-                  
-                  <p className="text-zinc-400 text-sm mb-4">
-                    SECTION 14
-                  </p>
-
-                  <pre className="whitespace-pre-wrap text-zinc-300 text-sm leading-relaxed">
-                    {result.extracted?.section_14}
-                  </pre>
-                </div>
-
-              </div>
-            )}
-
+              <button
+                onClick={handleGeneratePDF}
+                className="bg-orange-500 hover:bg-orange-600 px-5 py-3 rounded-xl font-semibold transition"
+              >
+                {loading ? "Processing..." : "Generate IMO PDF"}
+              </button>
+            </div>
           </div>
 
-          {/* RIGHT SIDEBAR */}
-          <div className="space-y-8">
+          {/* RIGHT PANEL */}
+          <div className="space-y-6">
 
-            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-8">
-              
-              <h3 className="text-xl font-bold mb-6">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
+              <h3 className="text-xl font-bold mb-5">
                 Platform Status
               </h3>
 
               <div className="space-y-4">
-
-                <div className="flex items-center justify-between">
+                <div className="flex justify-between">
                   <span className="text-zinc-400">
                     AI Extraction
                   </span>
 
-                  <span className="text-green-400 font-semibold">
+                  <span className="text-green-400 font-bold">
                     ONLINE
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex justify-between">
                   <span className="text-zinc-400">
                     DG Validation
                   </span>
 
-                  <span className="text-green-400 font-semibold">
+                  <span className="text-green-400 font-bold">
                     ACTIVE
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between">
+                <div className="flex justify-between">
                   <span className="text-zinc-400">
                     IMO Generator
                   </span>
 
-                  <span className="text-green-400 font-semibold">
+                  <span className="text-green-400 font-bold">
                     READY
                   </span>
                 </div>
-
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-3xl p-8">
-              
-              <h3 className="text-2xl font-black mb-4">
+            <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-3xl p-6">
+              <h3 className="text-2xl font-bold mb-3">
                 Enterprise Plan
               </h3>
 
-              <p className="text-orange-100 leading-relaxed">
+              <p className="text-sm text-orange-100 mb-5">
                 Unlock unlimited SDS processing, AI classification and PDF automation.
               </p>
 
-              <button className="mt-6 bg-white text-black px-6 py-3 rounded-2xl font-bold">
+              <button className="bg-white text-black font-bold px-5 py-2 rounded-xl">
                 Upgrade
               </button>
+            </div>
+          </div>
+        </div>
 
+        {/* RESULTS */}
+        <div className="mt-10 bg-zinc-950 border border-zinc-800 rounded-3xl p-8">
+
+          <h3 className="text-3xl font-bold mb-8">
+            SDS Extraction Results
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+              <p className="text-zinc-500 text-sm mb-2">
+                UN NUMBER
+              </p>
+
+              <h4 className="text-4xl font-bold text-orange-400">
+                {classification?.["UN Number"] || "N/A"}
+              </h4>
             </div>
 
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+              <p className="text-zinc-500 text-sm mb-2">
+                HAZARD CLASS
+              </p>
+
+              <h4 className="text-4xl font-bold text-pink-400">
+                {classification?.["Hazard Class"] || "N/A"}
+              </h4>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+              <p className="text-zinc-500 text-sm mb-2">
+                PACKING GROUP
+              </p>
+
+              <h4 className="text-4xl font-bold text-green-400">
+                {classification?.["Packing Group"] || "N/A"}
+              </h4>
+            </div>
+
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+              <p className="text-zinc-500 text-sm mb-2">
+                SHIPPING NAME
+              </p>
+
+              <h4 className="text-2xl font-bold text-white">
+                {classification?.["Proper Shipping Name"] || "N/A"}
+              </h4>
+            </div>
           </div>
 
+          {/* VALIDATION */}
+          {validation && (
+            <div className="mt-8 bg-green-500/10 border border-green-500/20 rounded-2xl p-6">
+              <h3 className="text-2xl font-bold text-green-400 mb-2">
+                DG Validation
+              </h3>
+
+              <p className="text-green-200">
+                {validation.message}
+              </p>
+            </div>
+          )}
+
+          {/* SDS TEXT */}
+          {sdsText && (
+            <div className="mt-10">
+              <h3 className="text-2xl font-bold mb-4">
+                Extracted SDS Text
+              </h3>
+
+              <div className="bg-black border border-zinc-800 rounded-2xl p-6 max-h-[400px] overflow-y-auto text-zinc-300 whitespace-pre-wrap">
+                {sdsText}
+              </div>
+            </div>
+          )}
         </div>
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }
