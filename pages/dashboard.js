@@ -2,9 +2,16 @@ import { useState } from "react";
 
 export default function Dashboard() {
   const [selectedFile, setSelectedFile] = useState(null);
+
   const [loading, setLoading] = useState(false);
 
+  const [sdsText, setSdsText] = useState("");
+
   const [sdsData, setSdsData] = useState(null);
+
+  const [classificationResult, setClassificationResult] = useState(null);
+
+  const [validationResult, setValidationResult] = useState(null);
 
   const [extractionResult, setExtractionResult] = useState({
     unNumber: "N/A",
@@ -15,9 +22,9 @@ export default function Dashboard() {
     tunnelCode: "N/A",
   });
 
-  const [classificationResult, setClassificationResult] = useState(null);
-
-  const [validationResult, setValidationResult] = useState(null);
+  // =========================
+  // FILE UPLOAD
+  // =========================
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -25,7 +32,16 @@ export default function Dashboard() {
     if (!file) return;
 
     setSelectedFile(file);
+
+    setSdsText("");
+    setSdsData(null);
+    setClassificationResult(null);
+    setValidationResult(null);
   };
+
+  // =========================
+  // READ SDS
+  // =========================
 
   const handleReadSDS = async () => {
     if (!selectedFile) {
@@ -33,9 +49,9 @@ export default function Dashboard() {
       return;
     }
 
-    setLoading(true);
-
     try {
+      setLoading(true);
+
       const formData = new FormData();
 
       formData.append("file", selectedFile);
@@ -53,6 +69,8 @@ export default function Dashboard() {
         throw new Error(data.error || "Failed to read SDS");
       }
 
+      setSdsText(data.text || "");
+
       setSdsData(data);
 
       setExtractionResult({
@@ -67,11 +85,16 @@ export default function Dashboard() {
       alert("SDS extracted successfully!");
     } catch (error) {
       console.error(error);
+
       alert("SDS extraction failed");
     } finally {
       setLoading(false);
     }
   };
+
+  // =========================
+  // CLASSIFY DG
+  // =========================
 
   const handleClassifyDG = async () => {
     if (!sdsData) {
@@ -79,9 +102,9 @@ export default function Dashboard() {
       return;
     }
 
-    setLoading(true);
-
     try {
+      setLoading(true);
+
       const response = await fetch("/api/classify", {
         method: "POST",
         headers: {
@@ -103,11 +126,16 @@ export default function Dashboard() {
       alert("DG classified successfully!");
     } catch (error) {
       console.error(error);
+
       alert("Classification failed");
     } finally {
       setLoading(false);
     }
   };
+
+  // =========================
+  // VALIDATE DG
+  // =========================
 
   const handleValidateDG = async () => {
     if (!classificationResult) {
@@ -115,9 +143,9 @@ export default function Dashboard() {
       return;
     }
 
-    setLoading(true);
-
     try {
+      setLoading(true);
+
       const response = await fetch("/api/validate", {
         method: "POST",
         headers: {
@@ -139,11 +167,16 @@ export default function Dashboard() {
       alert("DG validation completed!");
     } catch (error) {
       console.error(error);
+
       alert("DG validation failed");
     } finally {
       setLoading(false);
     }
   };
+
+  // =========================
+  // GENERATE IMO PDF
+  // =========================
 
   const handleGenerateIMO = async () => {
     if (!validationResult) {
@@ -151,9 +184,9 @@ export default function Dashboard() {
       return;
     }
 
-    setLoading(true);
-
     try {
+      setLoading(true);
+
       const response = await fetch("/api/generate-pdf", {
         method: "POST",
         headers: {
@@ -186,9 +219,12 @@ export default function Dashboard() {
 
       a.remove();
 
+      window.URL.revokeObjectURL(url);
+
       alert("IMO PDF generated successfully!");
     } catch (error) {
       console.error(error);
+
       alert("IMO PDF generation failed");
     } finally {
       setLoading(false);
@@ -232,18 +268,20 @@ export default function Dashboard() {
       </section>
 
       {/* MAIN GRID */}
-      <section className="max-w-6xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+      <section className="max-w-6xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-3 gap-6 pb-10">
+
         {/* LEFT */}
         <div className="lg:col-span-2 space-y-6">
 
           {/* UPLOAD CARD */}
           <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
+
             <h3 className="text-xl font-bold mb-6">
               Upload SDS
             </h3>
 
             <div className="border border-dashed border-zinc-700 rounded-2xl p-10 text-center">
+
               <div className="w-16 h-16 bg-orange-500/10 border border-orange-500/20 rounded-2xl mx-auto flex items-center justify-center text-3xl mb-5">
                 📄
               </div>
@@ -286,6 +324,7 @@ export default function Dashboard() {
 
             {/* ACTION BUTTONS */}
             <div className="flex flex-wrap gap-4 mt-6">
+
               <button
                 onClick={handleReadSDS}
                 disabled={loading}
@@ -317,56 +356,59 @@ export default function Dashboard() {
               >
                 Generate IMO PDF
               </button>
+
             </div>
           </div>
 
-          {/* SDS EXTRACTION RESULTS */}
+          {/* SDS RESULTS */}
           <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
-            <h3 className="text-3xl font-bold mb-6">
+
+            <h3 className="text-3xl font-bold mb-8">
               SDS Extraction Results
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-                <p className="text-xs uppercase text-zinc-500 mb-2">
-                  UN Number
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                <p className="text-zinc-500 text-sm mb-2">
+                  UN NUMBER
                 </p>
 
-                <h4 className="text-3xl font-bold text-orange-400">
+                <h4 className="text-4xl font-bold text-orange-400">
                   {extractionResult.unNumber}
                 </h4>
               </div>
 
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-                <p className="text-xs uppercase text-zinc-500 mb-2">
-                  Hazard Class
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                <p className="text-zinc-500 text-sm mb-2">
+                  HAZARD CLASS
                 </p>
 
-                <h4 className="text-3xl font-bold text-red-400">
+                <h4 className="text-4xl font-bold text-pink-400">
                   {extractionResult.hazardClass}
                 </h4>
               </div>
 
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-                <p className="text-xs uppercase text-zinc-500 mb-2">
-                  Packing Group
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                <p className="text-zinc-500 text-sm mb-2">
+                  PACKING GROUP
                 </p>
 
-                <h4 className="text-3xl font-bold text-green-400">
+                <h4 className="text-4xl font-bold text-green-400">
                   {extractionResult.packingGroup}
                 </h4>
               </div>
 
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
-                <p className="text-xs uppercase text-zinc-500 mb-2">
-                  Shipping Name
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                <p className="text-zinc-500 text-sm mb-2">
+                  SHIPPING NAME
                 </p>
 
-                <h4 className="text-xl font-bold">
+                <h4 className="text-2xl font-bold text-white">
                   {extractionResult.shippingName}
                 </h4>
               </div>
+
             </div>
           </div>
 
@@ -395,17 +437,20 @@ export default function Dashboard() {
               </pre>
             </div>
           )}
+
         </div>
 
         {/* RIGHT SIDEBAR */}
         <div className="space-y-6">
 
           <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
+
             <h3 className="text-xl font-bold mb-5">
               Platform Status
             </h3>
 
             <div className="space-y-4 text-sm">
+
               <div className="flex justify-between">
                 <span className="text-zinc-400">
                   AI Extraction
@@ -435,10 +480,12 @@ export default function Dashboard() {
                   READY
                 </span>
               </div>
+
             </div>
           </div>
 
           <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-3xl p-6">
+
             <h3 className="text-2xl font-bold mb-4">
               Enterprise Plan
             </h3>
@@ -450,8 +497,11 @@ export default function Dashboard() {
             <button className="bg-white text-black font-bold px-5 py-3 rounded-xl">
               Upgrade
             </button>
+
           </div>
+
         </div>
+
       </section>
     </div>
   );
