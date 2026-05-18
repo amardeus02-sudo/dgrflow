@@ -15,8 +15,6 @@ export default async function handler(req, res) {
 
     const input = req.body || {};
 
-    console.log("CLASSIFY INPUT RECEIVED");
-
     const sdsText =
       input.text ||
       input.raw_text ||
@@ -48,7 +46,7 @@ export default async function handler(req, res) {
         {
           role: "system",
           content:
-            "You are a dangerous goods classification specialist. You must analyze ONLY the SDS text provided in the current request. Do not use memory, previous SDS files, assumptions, examples, or default values. If data is not clearly found, return null.",
+            "You are a dangerous goods classification specialist. Analyze ONLY the SDS text provided in the current request. Do not use memory, previous files, examples, assumptions, or default values. If information is not clearly found in the SDS, return null.",
         },
         {
           role: "user",
@@ -76,7 +74,7 @@ Return ONLY valid JSON in this exact structure:
     "labels": [],
     "transport_mode": null,
     "segregation": null,
-    "source_confidence": "low | medium | high",
+    "source_confidence": "low",
     "notes": []
   }
 }
@@ -86,10 +84,12 @@ Rules:
 - Do NOT invent UN numbers.
 - Do NOT default to UN1993.
 - Do NOT default to Class 3.
-- If the SDS says "not regulated", return null for UN/class/packing group and note it.
+- If the product is not regulated for transport, return null for UN number, hazard class and packing group.
+- If not regulated, explain that clearly in notes.
 - Prefer Section 14 Transport Information.
-- If multiple transport modes appear, identify them in transport_mode.
-- Flash point must come from the SDS only.
+- Flash point must come only from the SDS.
+- If multiple transport modes are listed, summarize them in transport_mode.
+- If data is missing, return null instead of guessing.
 
 SDS TEXT:
 ${cleanText}
@@ -99,8 +99,6 @@ ${cleanText}
     });
 
     const raw = completion.choices?.[0]?.message?.content || "";
-
-    console.log("OPENAI RAW CLASSIFY:", raw);
 
     let parsed;
 
@@ -114,7 +112,7 @@ ${cleanText}
       });
     }
 
-    const classification = parsed.classification || parsed;
+    const classification = parsed.classification || {};
 
     return res.status(200).json({
       success: true,
