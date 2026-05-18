@@ -9,9 +9,11 @@ export default function Dashboard() {
   const [loadingGenerate, setLoadingGenerate] = useState(false);
 
   const [sdsText, setSdsText] = useState("");
+
   const [sdsData, setSdsData] = useState(null);
 
   const [classificationResult, setClassificationResult] = useState(null);
+
   const [validationResult, setValidationResult] = useState(null);
 
   const [extractionResult, setExtractionResult] = useState({
@@ -34,7 +36,6 @@ export default function Dashboard() {
 
     setSelectedFile(file);
 
-    // RESET STATES
     setSdsText("");
     setSdsData(null);
     setClassificationResult(null);
@@ -72,23 +73,7 @@ export default function Dashboard() {
         body: formData,
       });
 
-      const rawText = await response.text();
-
-      console.log("RAW SDS RESPONSE:", rawText);
-
-      let data;
-
-      try {
-        data = JSON.parse(rawText);
-      } catch (jsonError) {
-        console.error("JSON PARSE ERROR:", jsonError);
-
-        alert("API did not return valid JSON.");
-
-        return;
-      }
-
-      console.log("PARSED SDS DATA:", data);
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to read SDS");
@@ -109,7 +94,7 @@ export default function Dashboard() {
 
       alert("SDS extracted successfully!");
     } catch (error) {
-      console.error("READ SDS ERROR:", error);
+      console.error(error);
 
       alert("SDS extraction failed");
     } finally {
@@ -122,9 +107,6 @@ export default function Dashboard() {
   // =========================
 
   const handleClassifyDG = async () => {
-    console.log("CLASSIFY CLICKED");
-    console.log("SDS DATA:", sdsData);
-
     if (!sdsData) {
       alert("Please read the SDS first.");
       return;
@@ -141,23 +123,7 @@ export default function Dashboard() {
         body: JSON.stringify(sdsData),
       });
 
-      const rawText = await response.text();
-
-      console.log("RAW CLASSIFICATION RESPONSE:", rawText);
-
-      let data;
-
-      try {
-        data = JSON.parse(rawText);
-      } catch (jsonError) {
-        console.error("CLASSIFICATION JSON ERROR:", jsonError);
-
-        alert("Classification API invalid JSON");
-
-        return;
-      }
-
-      console.log("CLASSIFICATION DATA:", data);
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || "Classification failed");
@@ -167,7 +133,7 @@ export default function Dashboard() {
 
       alert("DG classified successfully!");
     } catch (error) {
-      console.error("CLASSIFICATION ERROR:", error);
+      console.error(error);
 
       alert("Classification failed");
     } finally {
@@ -180,9 +146,6 @@ export default function Dashboard() {
   // =========================
 
   const handleValidateDG = async () => {
-    console.log("VALIDATE CLICKED");
-    console.log("CLASSIFICATION RESULT:", classificationResult);
-
     if (!classificationResult) {
       alert("Please classify DG first.");
       return;
@@ -199,23 +162,7 @@ export default function Dashboard() {
         body: JSON.stringify(classificationResult),
       });
 
-      const rawText = await response.text();
-
-      console.log("RAW VALIDATION RESPONSE:", rawText);
-
-      let data;
-
-      try {
-        data = JSON.parse(rawText);
-      } catch (jsonError) {
-        console.error("VALIDATION JSON ERROR:", jsonError);
-
-        alert("Validation API invalid JSON");
-
-        return;
-      }
-
-      console.log("VALIDATION DATA:", data);
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || "Validation failed");
@@ -225,7 +172,7 @@ export default function Dashboard() {
 
       alert("DG validation completed!");
     } catch (error) {
-      console.error("VALIDATION ERROR:", error);
+      console.error(error);
 
       alert("DG validation failed");
     } finally {
@@ -238,8 +185,6 @@ export default function Dashboard() {
   // =========================
 
   const handleGenerateIMO = async () => {
-    console.log("GENERATE IMO CLICKED");
-
     if (!validationResult) {
       alert("Please validate DG first.");
       return;
@@ -259,8 +204,6 @@ export default function Dashboard() {
           validation: validationResult,
         }),
       });
-
-      console.log("PDF RESPONSE STATUS:", response.status);
 
       if (!response.ok) {
         throw new Error("Failed to generate IMO PDF");
@@ -286,13 +229,15 @@ export default function Dashboard() {
 
       alert("IMO PDF generated successfully!");
     } catch (error) {
-      console.error("PDF GENERATION ERROR:", error);
+      console.error(error);
 
       alert("IMO PDF generation failed");
     } finally {
       setLoadingGenerate(false);
     }
   };
+
+  const dg = classificationResult?.classification;
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -358,8 +303,6 @@ export default function Dashboard() {
               </p>
 
               <input
-                id="sds-upload"
-                name="sds-upload"
                 type="file"
                 accept=".pdf"
                 onChange={handleFileChange}
@@ -425,7 +368,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* SDS RESULTS */}
+          {/* EXTRACTION */}
           <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
 
             <h3 className="text-3xl font-bold mb-8">
@@ -478,47 +421,95 @@ export default function Dashboard() {
           </div>
 
           {/* CLASSIFICATION */}
-          {classificationResult && (
+          {dg && (
             <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
-              <h3 className="text-3xl font-bold mb-6">
+
+              <h3 className="text-3xl font-bold mb-8">
                 DG Classification
               </h3>
 
-              <pre className="bg-zinc-900 p-4 rounded-2xl overflow-auto text-sm whitespace-pre-wrap">
-                {JSON.stringify(classificationResult, null, 2)}
-              </pre>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                  <p className="text-zinc-500 text-sm mb-2">
+                    UN NUMBER
+                  </p>
+
+                  <h4 className="text-4xl font-bold text-orange-400">
+                    {dg.un_number}
+                  </h4>
+                </div>
+
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                  <p className="text-zinc-500 text-sm mb-2">
+                    HAZARD CLASS
+                  </p>
+
+                  <h4 className="text-4xl font-bold text-pink-400">
+                    {dg.hazard_class}
+                  </h4>
+                </div>
+
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                  <p className="text-zinc-500 text-sm mb-2">
+                    PACKING GROUP
+                  </p>
+
+                  <h4 className="text-4xl font-bold text-green-400">
+                    {dg.packing_group}
+                  </h4>
+                </div>
+
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+                  <p className="text-zinc-500 text-sm mb-2">
+                    SHIPPING NAME
+                  </p>
+
+                  <h4 className="text-xl font-bold text-white">
+                    {dg.proper_shipping_name}
+                  </h4>
+                </div>
+
+              </div>
             </div>
           )}
 
           {/* VALIDATION */}
-          {validationResult && (
+          {validationResult?.validation && (
             <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
-              <h3 className="text-3xl font-bold mb-6">
+
+              <h3 className="text-3xl font-bold mb-8">
                 DG Validation
               </h3>
 
-              <pre className="bg-zinc-900 p-4 rounded-2xl overflow-auto text-sm whitespace-pre-wrap">
-                {JSON.stringify(validationResult, null, 2)}
-              </pre>
-            </div>
-          )}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
 
-          {/* SDS RAW TEXT */}
-          {sdsText && (
-            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
-              <h3 className="text-3xl font-bold mb-6">
-                Extracted SDS Text
-              </h3>
+                <div className="flex items-center justify-between mb-6">
 
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-h-[400px] overflow-y-auto text-zinc-300 whitespace-pre-wrap text-sm">
-                {sdsText}
+                  <h4 className="text-2xl font-bold">
+                    Validation Status
+                  </h4>
+
+                  <span className={`px-4 py-2 rounded-full text-sm font-bold ${
+                    validationResult.validation.approved
+                      ? "bg-green-500/20 text-green-400"
+                      : "bg-red-500/20 text-red-400"
+                  }`}>
+                    {validationResult.validation.status}
+                  </span>
+                </div>
+
+                <p className="text-zinc-300 mb-6">
+                  {validationResult.validation.message}
+                </p>
+
               </div>
             </div>
           )}
 
         </div>
 
-        {/* RIGHT SIDEBAR */}
+        {/* SIDEBAR */}
         <div className="space-y-6">
 
           <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
