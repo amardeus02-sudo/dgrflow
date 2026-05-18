@@ -4,6 +4,64 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+function extractByRegex(text) {
+  const clean = text || "";
+
+  const unMatch = clean.match(/\bUN\s?(\d{4})\b/i);
+
+  const classMatch =
+    clean.match(/(?:hazard\s*)?class\s*[:\-]?\s*([0-9](?:\.[0-9])?)/i) ||
+    clean.match(/transport hazard class.*?([0-9](?:\.[0-9])?)/i);
+
+  const pgMatch =
+    clean.match(/packing group\s*[:\-]?\s*(I{1,3}|IV|V)/i);
+
+  const flashMatch =
+    clean.match(/flash point\s*[:\-]?\s*([\-0-9.]+\s?°?\s?[CF])/i);
+
+  const emsMatch =
+    clean.match(/\bEMS\s*[:\-]?\s*([A-Z]\-[A-Z0-9,\s]+)/i);
+
+  const marineMatch =
+    clean.match(/marine pollutant\s*[:\-]?\s*(yes|no)/i);
+
+  const psnMatch =
+    clean.match(/proper shipping name\s*[:\-]?\s*([^\n\r]+)/i) ||
+    clean.match(/shipping name\s*[:\-]?\s*([^\n\r]+)/i);
+
+  const section14Match =
+    clean.match(/14\.?\s*transport information([\s\S]*?)(15\.|16\.|regulatory information|other information)/i);
+
+  const section14 = section14Match ? section14Match[1] : clean;
+
+  return {
+    un_number: unMatch ? `UN${unMatch[1]}` : null,
+    proper_shipping_name: psnMatch ? psnMatch[1].trim().slice(0, 120) : null,
+    technical_name: null,
+    hazard_class: classMatch ? classMatch[1] : null,
+    subsidiary_risk: null,
+    packing_group: pgMatch ? pgMatch[1] : null,
+    marine_pollutant: marineMatch ? marineMatch[1].toUpperCase() : null,
+    ems: emsMatch ? emsMatch[1].trim() : null,
+    flash_point: flashMatch ? flashMatch[1].trim() : null,
+    limited_quantity: null,
+    excepted_quantity: null,
+    labels: classMatch ? [classMatch[1]] : [],
+    transport_mode: section14.toLowerCase().includes("imdg")
+      ? "SEA"
+      : section14.toLowerCase().includes("iata")
+        ? "AIR"
+        : section14.toLowerCase().includes("adr")
+          ? "GROUND"
+          : null,
+    segregation: null,
+    source_confidence: unMatch || classMatch ? "medium" : "low",
+    notes: [
+      "Fallback extraction used. Review classification manually.",
+    ],
+  };
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
@@ -21,9 +79,10 @@ export default async function handler(req, res) {
       input.rawText ||
       input.extracted_text ||
       input.sds_text ||
+      input.extracted?.section_14 ||
       "";
 
-    if (!sdsText || sdsText.length < 50) {
+    if (!sdsText || sdsText.length < 20) {
       return res.status(400).json({
         success: false,
         error: "No valid SDS text received for classification",
@@ -36,21 +95,28 @@ export default async function handler(req, res) {
       .trim()
       .slice(0, 14000);
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0,
-      response_format: {
-        type: "json_object",
-      },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a dangerous goods classification specialist. Analyze ONLY the SDS text provided in the current request. Do not use memory, previous files, examples, assumptions, or default values. If information is not clearly found in the SDS, return null.",
+    let classification = null;
+
+    try {
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error("OPENAI_API_KEY is missing");
+      }
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        temperature: 0,
+        response_format: {
+          type: "json_object",
         },
-        {
-          role: "user",
-          content: `
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a dangerous goods classification specialist. Analyze ONLY the SDS text provided in the current request. Do not use memory, previous files, examples, assumptions, or default values. If information is not clearly found in the SDS, return null.",
+          },
+          {
+            role: "user",
+            content: `
 Analyze the following Safety Data Sheet.
 
 Extract dangerous goods transport information.
@@ -94,25 +160,20 @@ Rules:
 SDS TEXT:
 ${cleanText}
 `,
-        },
-      ],
-    });
-
-    const raw = completion.choices?.[0]?.message?.content || "";
-
-    let parsed;
-
-    try {
-      parsed = JSON.parse(raw);
-    } catch (error) {
-      return res.status(500).json({
-        success: false,
-        error: "OpenAI returned invalid JSON",
-        raw,
+          },
+        ],
       });
-    }
 
-    const classification = parsed.classification || {};
+      const raw = completion.choices?.[0]?.message?.content || "";
+
+      const parsed = JSON.parse(raw);
+
+      classification = parsed.classification || parsed;
+    } catch (openaiError) {
+      console.error("OPENAI CLASSIFY FAILED:", openaiError.message);
+
+      classification = extractByRegex(cleanText);
+    }
 
     return res.status(200).json({
       success: true,
